@@ -2,7 +2,12 @@
 
 import { useMemo, useState } from "react";
 import {
+  BellRing,
   Check,
+  Copy,
+  Download,
+  ExternalLink,
+  Link2,
   MailPlus,
   Trash2,
   UserCheck,
@@ -13,6 +18,7 @@ import {
 import { BabyMemberFormSheet } from "@/components/family/baby-member-form-sheet";
 import { useAppData } from "@/components/providers/app-data-provider";
 import { useAuth } from "@/components/providers/auth-provider";
+import { useToast } from "@/components/providers/toast-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,6 +26,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/field";
 import { LoadingState } from "@/components/ui/loading-state";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { APK_DOWNLOAD_URL, PUBLIC_SITE_URL } from "@/lib/constants";
+import type { BabyMember } from "@/lib/types";
 
 const roleLabelMap = {
   owner: "拥有者",
@@ -34,6 +42,7 @@ const statusLabelMap = {
 
 export default function FamilyPage() {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const {
     status,
     selectedBaby,
@@ -54,6 +63,60 @@ export default function FamilyPage() {
     }),
     [selectedBabyMembers],
   );
+
+  const collaborationAlerts = useMemo(() => {
+    const alerts: Array<{ title: string; description: string }> = [];
+
+    if (incomingInvites.length > 0) {
+      alerts.push({
+        title: `有 ${incomingInvites.length} 条邀请待处理`,
+        description: "登录当前邮箱后确认加入，就能立即进入对应宝宝档案开始协作。",
+      });
+    }
+
+    if (selectedBaby && permissions.canManageMembers && memberSummary.invited > 0) {
+      alerts.push({
+        title: `${memberSummary.invited} 位成员还在等待确认`,
+        description: "可以复制邀请链接发给家人，减少他们找入口和重复注册的步骤。",
+      });
+    }
+
+    if (selectedBaby && memberSummary.active > 1) {
+      alerts.push({
+        title: `${memberSummary.active} 位家庭成员正在共同记录`,
+        description: "当前档案已经进入协作模式，适合一起整理相册、里程碑和成长数据。",
+      });
+    }
+
+    if (selectedBaby && permissions.role === "viewer") {
+      alerts.push({
+        title: "你当前是只读成员",
+        description: "如果需要补充记录或上传照片，可以请拥有者把你调整为编辑者。",
+      });
+    }
+
+    return alerts;
+  }, [incomingInvites.length, memberSummary.active, memberSummary.invited, permissions, selectedBaby]);
+
+  const copyToClipboard = async (text: string, message: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(message, "success");
+    } catch {
+      showToast("复制失败，请稍后重试", "error");
+    }
+  };
+
+  const buildFamilyLink = (member?: BabyMember) => {
+    const url = new URL("/family", PUBLIC_SITE_URL);
+    if (selectedBaby?.id) {
+      url.searchParams.set("baby", selectedBaby.id);
+    }
+    if (member) {
+      url.searchParams.set("invite", member.id);
+    }
+    return url.toString();
+  };
 
   if (status === "loading" || status === "idle") {
     return <LoadingState label="正在整理家庭共享信息..." />;
@@ -170,7 +233,7 @@ export default function FamilyPage() {
                   <br />
                   2. 编辑者可维护记录、里程碑和成长数据。
                   <br />
-                  3. 查看者保持只读，后续继续补通知和更细权限。
+                  3. 查看者保持只读，邀请链接和协作提醒已开放。
                 </div>
               </Card>
 
@@ -209,8 +272,71 @@ export default function FamilyPage() {
                     </Badge>
                   </div>
                 </div>
+
+                <div className="rounded-[24px] border border-dashed border-[#e8d7cb] bg-[#fff8f2] p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-[18px] bg-white p-2 text-[#c97954]">
+                      <Link2 className="h-5 w-5" />
+                    </div>
+                    <div className="w-full">
+                      <h4 className="text-base font-bold text-slate-900">分享入口</h4>
+                      <p className="mt-2 text-sm leading-6 text-slate-500">
+                        可以直接把家庭页链接或 APK 下载链接发给家人，减少他们找入口的成本。
+                      </p>
+                      <div className="mt-3 grid gap-3">
+                        <Button
+                          onClick={() =>
+                            void copyToClipboard(buildFamilyLink(), "家庭共享入口已复制")
+                          }
+                          type="button"
+                          variant="secondary"
+                        >
+                          <Copy className="mr-2 h-4 w-4" />
+                          复制家庭页链接
+                        </Button>
+                        <Button
+                          onClick={() => window.open(APK_DOWNLOAD_URL, "_blank", "noopener,noreferrer")}
+                          type="button"
+                          variant="secondary"
+                        >
+                          <Download className="mr-2 h-4 w-4" />
+                          打开 APK 下载页
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </Card>
             </div>
+
+            {collaborationAlerts.length > 0 ? (
+              <section className="space-y-4">
+                <SectionHeading
+                  description="这里会集中显示需要你处理的共享动作和最近的协作状态。"
+                  title="协作提醒"
+                />
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {collaborationAlerts.map((item) => (
+                    <Card
+                      key={item.title}
+                      className="bg-[linear-gradient(160deg,#fff7f0_0%,#ffffff_48%,#f3f9f4_100%)]"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="rounded-[16px] bg-white p-2 text-[#c97954] shadow-sm">
+                          <BellRing className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-base font-bold text-slate-900">{item.title}</h3>
+                          <p className="mt-2 text-sm leading-6 text-slate-500">
+                            {item.description}
+                          </p>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
             <section className="space-y-4">
               <SectionHeading title="共享成员列表" />
@@ -242,6 +368,22 @@ export default function FamilyPage() {
                       </div>
 
                       <div className="flex flex-col gap-3 md:min-w-[240px]">
+                        {permissions.canManageMembers && member.status === "invited" ? (
+                          <Button
+                            onClick={() =>
+                              void copyToClipboard(
+                                buildFamilyLink(member),
+                                "邀请链接已复制",
+                              )
+                            }
+                            type="button"
+                            variant="secondary"
+                          >
+                            <Copy className="mr-2 h-4 w-4" />
+                            复制邀请链接
+                          </Button>
+                        ) : null}
+
                         {permissions.canManageMembers ? (
                           <Select
                             onChange={(event) => {
@@ -257,6 +399,19 @@ export default function FamilyPage() {
                             <option value="editor">编辑者</option>
                             <option value="viewer">查看者</option>
                           </Select>
+                        ) : null}
+
+                        {!permissions.canManageMembers && member.status === "invited" ? (
+                          <Button
+                            onClick={() =>
+                              window.open(buildFamilyLink(member), "_blank", "noopener,noreferrer")
+                            }
+                            type="button"
+                            variant="secondary"
+                          >
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            打开邀请页
+                          </Button>
                         ) : null}
 
                         {permissions.canManageMembers ? (

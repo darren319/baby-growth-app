@@ -16,6 +16,12 @@
 - 搜索与筛选
 - 家庭共享 / AI 周报 / 提醒功能占位
 
+## 已上线入口
+
+- 在线体验：[https://darren319.github.io/](https://darren319.github.io/)
+- Android APK 下载：[latest release 下载页](https://github.com/darren319/baby-growth-app/releases/latest/download/baby-growth-app-android.apk)
+- 源码仓库：[https://github.com/darren319/baby-growth-app](https://github.com/darren319/baby-growth-app)
+
 ## 技术栈
 
 - Next.js 15 + App Router
@@ -48,6 +54,9 @@ cp .env.example .env.local
 NEXT_PUBLIC_SUPABASE_URL=your-project-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 NEXT_PUBLIC_BASE_PATH=
+NEXT_PUBLIC_PUBLIC_SITE_URL=https://darren319.github.io/
+NEXT_PUBLIC_SOURCE_REPO_URL=https://github.com/darren319/baby-growth-app
+NEXT_PUBLIC_APK_DOWNLOAD_URL=https://github.com/darren319/baby-growth-app/releases/latest/download/baby-growth-app-android.apk
 ```
 
 如果不配置 Supabase，项目会自动进入本地演示模式：
@@ -151,9 +160,9 @@ npm run mobile:sync
 
 说明：
 
-- Android APK 真正打包依赖本机 Android Studio / Android SDK / Java 环境
+- Android APK 打包依赖 Android SDK 和 JDK 21
 - iOS App 真正打包依赖 Xcode / CocoaPods
-- 本仓库当前已经准备好 Web + Capacitor 结构，后续只需要在原生环境里继续打包签名
+- 当前仓库已经验证通过 Capacitor Android 打包，并已产出公开可下载 APK
 
 ## MVP 实现范围
 
@@ -181,27 +190,30 @@ npm run mobile:sync
 - AI 自动打标签
 - AI 成长年册
 - 疫苗 / 体检 / 生日 / 纪念日提醒
-- 家庭共享邮件通知 / 更细粒度权限
+- 家庭共享邮件通知 / 更细粒度权限 / 服务端消息触达
 
-## 静态发布
+## GitHub Pages 发布
 
-项目支持静态导出，适合部署到 GitHub Pages、Netlify、Vercel 静态模式或任意 CDN。
+仓库内已包含 [`.github/workflows/deploy-pages.yml`](./.github/workflows/deploy-pages.yml)。
 
-如果你部署到 GitHub Pages 的 project page：
+使用方式：
 
-- 构建前把 `NEXT_PUBLIC_BASE_PATH` 设置为 `/${仓库名}`
-- 再执行 `npm run build`
-- 把 `out/` 内容发布到目标分支或静态托管目录
+1. 把本项目作为独立仓库推到 GitHub
+2. 进入仓库 `Settings -> Pages`
+3. Source 选择 `GitHub Actions`
+4. 推送到 `main` 分支后会自动构建并发布
 
-如果你部署到根域名或 `username.github.io` 这类 root site：
+说明：
 
-- 保持 `NEXT_PUBLIC_BASE_PATH` 为空
-- 直接执行 `npm run build`
+- 工作流会自动把 `NEXT_PUBLIC_BASE_PATH` 设置为 `/${仓库名}`
+- 如果你部署到自定义域名或根域名，可以手动调整这个环境变量
+- 本地开发通常不需要设置 `NEXT_PUBLIC_BASE_PATH`
 
 ## 说明
 
 - 当前为了兼容静态导出与 Capacitor，认证和数据加载采用客户端模式
 - 未配置 Supabase 时，登录会走本地演示模式
+- 若要切到真实线上模式，需要你自己的 Supabase 项目 URL、anon key，以及在 Supabase 控制台开启 Google Provider
 - 视频在演示模式下以占位封面为主，正式接入 Supabase Storage 后可使用真实播放链接
 - 共享编辑场景下，Storage 路径已经改成按 `babyId` 分层，拥有者和编辑者都能清理关联媒体
 - 如果你之前已经执行过旧版 `schema.sql`，请运行迁移文件补齐共享邀请、角色权限和新的 Storage policy

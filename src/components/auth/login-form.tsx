@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight, Download, ExternalLink, Github, Sparkles } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,7 +12,13 @@ import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FieldError, FieldHint, FieldLabel, Input } from "@/components/ui/field";
-import { APP_DESCRIPTION, APP_NAME } from "@/lib/constants";
+import {
+  APK_DOWNLOAD_URL,
+  APP_DESCRIPTION,
+  APP_NAME,
+  PUBLIC_SITE_URL,
+  SOURCE_REPO_URL,
+} from "@/lib/constants";
 import { authSchema } from "@/lib/validation";
 
 type AuthFormValues = z.input<typeof authSchema>;
@@ -238,6 +244,47 @@ export function LoginForm() {
                 >
                   {googleLoading ? "跳转中..." : "使用 Google 继续"}
                 </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-[24px] border border-[#e8d7cb] bg-[linear-gradient(155deg,#fff6ef_0%,#ffffff_55%,#f2f8f3_100%)] p-4">
+            <div className="flex items-start gap-3">
+              <div className="rounded-full bg-white p-2 text-[#5c7cab] shadow-sm">
+                <Download className="h-4 w-4" />
+              </div>
+              <div className="w-full">
+                <p className="text-sm font-semibold text-slate-700">直接体验与下载</p>
+                <p className="mt-1 text-sm leading-6 text-slate-500">
+                  不想配置环境也可以直接在线打开，或下载已经打好的 Android 安装包。
+                </p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <button
+                    className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-[#ecd9ce] bg-white/90 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#f0b698] hover:bg-white"
+                    onClick={() => window.open(PUBLIC_SITE_URL, "_blank", "noopener,noreferrer")}
+                    type="button"
+                  >
+                    在线体验
+                    <ExternalLink className="ml-2 h-4 w-4" />
+                  </button>
+                  <button
+                    className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#f5a072,#ee7f81)] px-4 py-2 text-sm font-semibold text-white shadow-[0_14px_30px_rgba(238,127,129,0.28)] transition hover:-translate-y-0.5"
+                    onClick={() => window.open(APK_DOWNLOAD_URL, "_blank", "noopener,noreferrer")}
+                    type="button"
+                  >
+                    下载 Android APK
+                    <Download className="ml-2 h-4 w-4" />
+                  </button>
+                </div>
+
+                <button
+                  className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-slate-700"
+                  onClick={() => window.open(SOURCE_REPO_URL, "_blank", "noopener,noreferrer")}
+                  type="button"
+                >
+                  查看源码仓库
+                  <Github className="h-4 w-4" />
+                </button>
               </div>
             </div>
           </div>

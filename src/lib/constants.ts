@@ -3,6 +3,14 @@ import type { GrowthMetricType, MemoryMood, TagOption } from "@/lib/types";
 export const APP_NAME = "宝宝成长记录";
 export const APP_DESCRIPTION =
   "面向新手父母的成长记录 App，支持日常记录、里程碑、相册和成长数据趋势。";
+export const PUBLIC_SITE_URL =
+  process.env.NEXT_PUBLIC_PUBLIC_SITE_URL ?? "https://darren319.github.io/";
+export const SOURCE_REPO_URL =
+  process.env.NEXT_PUBLIC_SOURCE_REPO_URL ??
+  "https://github.com/darren319/baby-growth-app";
+export const APK_DOWNLOAD_URL =
+  process.env.NEXT_PUBLIC_APK_DOWNLOAD_URL ??
+  "https://github.com/darren319/baby-growth-app/releases/latest/download/baby-growth-app-android.apk";
 
 export const MEMORY_TAG_PRESETS: TagOption[] = [
   { id: "eat", name: "吃饭", color: "#f4a26d" },
