@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from "react";
 import { ImagePlus, Trash2, Video } from "lucide-react";
 
+import { useToast } from "@/components/providers/toast-provider";
 import {
   ACCEPTED_IMAGE_TYPES,
   ACCEPTED_VIDEO_TYPES,
@@ -29,6 +30,7 @@ export function FileUploadField({
   label = "图片 / 视频",
   hint = "支持多图和视频上传。图片建议 8MB 内，视频建议 80MB 内。",
 }: FileUploadFieldProps) {
+  const { showToast } = useToast();
   const previews = useMemo(
     () =>
       newFiles.map((file) => ({
@@ -62,20 +64,29 @@ export function FileUploadField({
             multiple
             onChange={async (event) => {
               const nextFiles = Array.from(event.target.files ?? []);
+              const invalidMessages: string[] = [];
               const validFiles = nextFiles.filter((file) => {
                 const isImage = ACCEPTED_IMAGE_TYPES.includes(file.type);
                 const isVideo = ACCEPTED_VIDEO_TYPES.includes(file.type);
                 if (!isImage && !isVideo) {
+                  invalidMessages.push(`${file.name} 格式不支持`);
                   return false;
                 }
                 if (isImage && file.size > MAX_IMAGE_SIZE_BYTES) {
+                  invalidMessages.push(`${file.name} 超过 8MB`);
                   return false;
                 }
                 if (isVideo && file.size > MAX_VIDEO_SIZE_BYTES) {
+                  invalidMessages.push(`${file.name} 超过 80MB`);
                   return false;
                 }
                 return true;
               });
+
+              if (invalidMessages.length > 0) {
+                showToast(`已跳过：${invalidMessages.join("；")}`, "error");
+              }
+
               onNewFilesChange([...newFiles, ...validFiles]);
               event.target.value = "";
             }}
