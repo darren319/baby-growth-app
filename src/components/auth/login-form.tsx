@@ -18,11 +18,12 @@ import { authSchema } from "@/lib/validation";
 type AuthFormValues = z.input<typeof authSchema>;
 
 export function LoginForm() {
-  const { signIn, signUp, isMockMode, status } = useAuth();
+  const { signIn, signUp, signInWithGoogle, isMockMode, status } = useAuth();
   const { showToast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const form = useForm<AuthFormValues>({
     resolver: zodResolver(authSchema),
@@ -204,12 +205,38 @@ export function LoginForm() {
                 <Sparkles className="h-4 w-4" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-slate-700">Google 登录预留</p>
+                <p className="text-sm font-semibold text-slate-700">Google 登录</p>
                 <p className="mt-1 text-sm leading-6 text-slate-500">
-                  TODO: 后续可在 Supabase Auth 中开启 Google Provider，并在这里补充一键登录按钮。
+                  {isMockMode
+                    ? "演示模式下会直接进入一个 Google 模拟家长账号。"
+                    : "在 Supabase 控制台开启 Google Provider 后，这里会直接跳转 OAuth 登录。"}
                 </p>
-                <Button className="mt-3" type="button" variant="secondary">
-                  未来支持 Google 登录
+                <Button
+                  className="mt-3"
+                  disabled={googleLoading}
+                  onClick={async () => {
+                    try {
+                      setGoogleLoading(true);
+                      await signInWithGoogle();
+                      if (isMockMode) {
+                        showToast("已使用 Google 演示账号登录", "success");
+                        router.replace(searchParams.get("next") ?? "/dashboard");
+                      } else {
+                        showToast("正在跳转到 Google 登录...", "info");
+                      }
+                    } catch (error) {
+                      showToast(
+                        error instanceof Error ? error.message : "Google 登录暂时不可用",
+                        "error",
+                      );
+                    } finally {
+                      setGoogleLoading(false);
+                    }
+                  }}
+                  type="button"
+                  variant="secondary"
+                >
+                  {googleLoading ? "跳转中..." : "使用 Google 继续"}
                 </Button>
               </div>
             </div>

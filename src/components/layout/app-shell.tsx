@@ -1,7 +1,16 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Baby, Clock3, GalleryHorizontal, Home, LogOut, Sparkles, TrendingUp } from "lucide-react";
+import {
+  Baby,
+  Clock3,
+  GalleryHorizontal,
+  Home,
+  LogOut,
+  Sparkles,
+  TrendingUp,
+  UsersRound,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -21,6 +30,7 @@ const primaryNav = [
 
 const secondaryNav = [
   { href: "/babies", label: "宝宝档案", icon: Baby },
+  { href: "/family", label: "家庭共享", icon: UsersRound },
   { href: "/milestones", label: "里程碑", icon: Sparkles },
   { href: "/future", label: "未来功能", icon: Sparkles },
 ];

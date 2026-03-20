@@ -14,12 +14,14 @@ import type {
   AuthFormInput,
   AuthUser,
   Baby,
+  BabyMember,
   GrowthMetric,
   MediaAsset,
   MemoryRecord,
   Milestone,
   RepositoryContext,
   SaveBabyInput,
+  SaveBabyMemberInput,
   SaveGrowthMetricInput,
   SaveMemoryInput,
   SaveMilestoneInput,
@@ -108,6 +110,23 @@ interface GrowthMetricRow {
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface BabyMemberRow {
+  id: string;
+  baby_id: string;
+  user_id: string | null;
+  invite_email: string;
+  display_name: string | null;
+  role: BabyMember["role"];
+  status: BabyMember["status"];
+  invited_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
 }
 
 function normalizeUser(user: User | AuthUser | null): AuthUser | null {
@@ -253,6 +272,21 @@ function mapGrowthMetric(row: GrowthMetricRow): GrowthMetric {
   };
 }
 
+function mapBabyMember(row: BabyMemberRow): BabyMember {
+  return {
+    id: row.id,
+    babyId: row.baby_id,
+    userId: row.user_id,
+    inviteEmail: row.invite_email,
+    displayName: row.display_name,
+    role: row.role,
+    status: row.status,
+    invitedBy: row.invited_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 function requireSupabase() {
   const client = getSupabaseBrowserClient();
   if (!client) {
@@ -286,6 +320,37 @@ async function uploadToStorage(
     storagePath,
     publicUrl: data.publicUrl,
   };
+}
+
+async function removeStoragePaths(paths: Array<string | null | undefined>) {
+  const storagePaths = Array.from(
+    new Set(paths.filter((path): path is string => Boolean(path))),
+  );
+
+  if (storagePaths.length === 0) {
+    return;
+  }
+
+  const supabase = requireSupabase();
+  await supabase.storage.from(STORAGE_BUCKET).remove(storagePaths);
+}
+
+async function claimPendingFamilyInvites(user: AuthUser) {
+  if (getMockMode() || !user.email) {
+    return;
+  }
+
+  const supabase = requireSupabase();
+  await supabase
+    .from("baby_members")
+    .update({
+      user_id: user.id,
+      status: "active",
+      display_name: user.fullName ?? null,
+    })
+    .eq("invite_email", normalizeEmail(user.email))
+    .is("user_id", null)
+    .eq("status", "invited");
 }
 
 async function upsertMemoryTags(user: AuthUser, memoryId: string, tags: string[]) {
@@ -355,7 +420,7 @@ async function syncMemoryMedia(
       throw deleteError;
     }
 
-    // TODO: 这里还需要删除 Supabase Storage 中对应的文件，MVP 先保留数据行级联删除。
+    await removeStoragePaths(removable.map((row) => row.storage_path));
   }
 
   for (const file of input.newFiles) {
@@ -412,7 +477,7 @@ async function syncMilestoneMedia(
       throw deleteError;
     }
 
-    // TODO: 这里还需要补充 Storage 文件删除逻辑，避免残留对象。
+    await removeStoragePaths(removable.map((row) => row.storage_path));
   }
 
   for (const file of input.newFiles) {
@@ -452,7 +517,11 @@ export const authRepository = {
     const {
       data: { session },
     } = await supabase.auth.getSession();
-    return normalizeUser(session?.user ?? null);
+    const currentUser = normalizeUser(session?.user ?? null);
+    if (currentUser) {
+      await claimPendingFamilyInvites(currentUser);
+    }
+    return currentUser;
   },
   subscribe(callback: (event: AuthChangeEvent, user: AuthUser | null) => void) {
     if (getMockMode()) {
@@ -486,7 +555,9 @@ export const authRepository = {
       throw error;
     }
 
-    return normalizeUser(data.user)!;
+    const nextUser = normalizeUser(data.user)!;
+    await claimPendingFamilyInvites(nextUser);
+    return nextUser;
   },
   async signUp(input: AuthFormInput) {
     if (getMockMode()) {
@@ -511,7 +582,44 @@ export const authRepository = {
       throw error;
     }
 
-    return normalizeUser(data.user)!;
+    const nextUser = normalizeUser(data.user)!;
+    await claimPendingFamilyInvites(nextUser);
+    return nextUser;
+  },
+  async signInWithGoogle() {
+    if (getMockMode()) {
+      const user = createMockUser({
+        email: "google.parent@example.com",
+        password: "google-oauth",
+        fullName: "Google 家长",
+      });
+      writeMockAuthUser(user);
+      readMockStore(user);
+      return user;
+    }
+
+    const supabase = requireSupabase();
+    const redirectTo =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/login?next=/dashboard`
+        : undefined;
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo,
+        queryParams: {
+          access_type: "offline",
+          prompt: "consent",
+        },
+      },
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return null;
   },
   async signOut() {
     if (getMockMode()) {
@@ -534,39 +642,40 @@ export const appRepository = {
     }
 
     const supabase = requireSupabase();
-    const [babiesRes, memoriesRes, milestonesRes, growthRes] = await Promise.all([
+    await claimPendingFamilyInvites(context.user);
+
+    const [babiesRes, memoriesRes, milestonesRes, growthRes, membersRes] = await Promise.all([
       supabase
         .from("babies")
         .select("*")
-        .eq("user_id", context.user.id)
         .order("birth_date", { ascending: true }),
       supabase
         .from("memories")
         .select("*, media_assets(*), memory_tags(tags(id,name,color))")
-        .eq("user_id", context.user.id)
         .order("recorded_at", { ascending: false }),
       supabase
         .from("milestones")
         .select("*, media_assets(*)")
-        .eq("user_id", context.user.id)
         .order("happened_at", { ascending: false }),
       supabase
         .from("growth_metrics")
         .select("*")
-        .eq("user_id", context.user.id)
         .order("recorded_on", { ascending: true }),
+      supabase.from("baby_members").select("*").order("created_at", { ascending: true }),
     ]);
 
     if (babiesRes.error) throw babiesRes.error;
     if (memoriesRes.error) throw memoriesRes.error;
     if (milestonesRes.error) throw milestonesRes.error;
     if (growthRes.error) throw growthRes.error;
+    if (membersRes.error) throw membersRes.error;
 
     return {
       babies: (babiesRes.data ?? []).map(mapBaby),
       memories: (memoriesRes.data ?? []).map(mapMemory),
       milestones: (milestonesRes.data ?? []).map(mapMilestone),
       growthMetrics: (growthRes.data ?? []).map(mapGrowthMetric),
+      babyMembers: (membersRes.data ?? []).map(mapBabyMember),
     };
   },
   async saveBaby(context: RepositoryContext, input: SaveBabyInput) {
@@ -718,6 +827,10 @@ export const appRepository = {
     }
 
     const supabase = requireSupabase();
+    const { data: mediaRows } = await supabase
+      .from("media_assets")
+      .select("storage_path")
+      .eq("memory_id", memoryId);
     const { error } = await supabase
       .from("memories")
       .delete()
@@ -725,7 +838,103 @@ export const appRepository = {
       .eq("user_id", context.user.id);
     if (error) throw error;
 
-    // TODO: 删除 memories 数据行后，同步清理 Storage 文件对象。
+    await removeStoragePaths((mediaRows ?? []).map((row) => row.storage_path));
+  },
+  async inviteBabyMember(context: RepositoryContext, input: SaveBabyMemberInput) {
+    const normalizedEmail = normalizeEmail(input.inviteEmail);
+
+    if (normalizedEmail === normalizeEmail(context.user.email)) {
+      throw new Error("当前账号已经是宝宝拥有者，不需要重复邀请");
+    }
+
+    if (context.isMockMode) {
+      const store = readMockStore(context.user);
+      const existing = store.babyMembers.find(
+        (member) =>
+          member.babyId === input.babyId &&
+          normalizeEmail(member.inviteEmail) === normalizedEmail,
+      );
+      const now = new Date().toISOString();
+      const nextMember: BabyMember = {
+        id: existing?.id ?? safeId(),
+        babyId: input.babyId,
+        userId: existing?.userId ?? null,
+        inviteEmail: normalizedEmail,
+        displayName: input.displayName?.trim() || existing?.displayName || null,
+        role: input.role,
+        status: existing?.status ?? "invited",
+        invitedBy: context.user.id,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+
+      const babyMembers = existing
+        ? store.babyMembers.map((member) =>
+            member.id === existing.id ? nextMember : member,
+          )
+        : [...store.babyMembers, nextMember];
+      writeMockStore(context.user, { ...store, babyMembers });
+      return;
+    }
+
+    const supabase = requireSupabase();
+    const { data: existing, error: existingError } = await supabase
+      .from("baby_members")
+      .select("id,user_id,status")
+      .eq("baby_id", input.babyId)
+      .eq("invite_email", normalizedEmail)
+      .maybeSingle();
+
+    if (existingError) {
+      throw existingError;
+    }
+
+    if (existing?.id) {
+      const { error } = await supabase
+        .from("baby_members")
+        .update({
+          display_name: input.displayName?.trim() || null,
+          role: input.role,
+          status: existing.user_id ? existing.status : "invited",
+        })
+        .eq("id", existing.id);
+
+      if (error) {
+        throw error;
+      }
+      return;
+    }
+
+    const { error } = await supabase.from("baby_members").insert({
+      id: safeId(),
+      baby_id: input.babyId,
+      user_id: null,
+      invite_email: normalizedEmail,
+      display_name: input.displayName?.trim() || null,
+      role: input.role,
+      status: "invited",
+      invited_by: context.user.id,
+    });
+
+    if (error) {
+      throw error;
+    }
+  },
+  async removeBabyMember(context: RepositoryContext, memberId: string) {
+    if (context.isMockMode) {
+      const store = readMockStore(context.user);
+      writeMockStore(context.user, {
+        ...store,
+        babyMembers: store.babyMembers.filter((member) => member.id !== memberId),
+      });
+      return;
+    }
+
+    const supabase = requireSupabase();
+    const { error } = await supabase.from("baby_members").delete().eq("id", memberId);
+    if (error) {
+      throw error;
+    }
   },
   async saveMilestone(context: RepositoryContext, input: SaveMilestoneInput) {
     if (context.isMockMode) {
@@ -808,6 +1017,10 @@ export const appRepository = {
     }
 
     const supabase = requireSupabase();
+    const { data: mediaRows } = await supabase
+      .from("media_assets")
+      .select("storage_path")
+      .eq("milestone_id", milestoneId);
     const { error } = await supabase
       .from("milestones")
       .delete()
@@ -815,7 +1028,7 @@ export const appRepository = {
       .eq("user_id", context.user.id);
     if (error) throw error;
 
-    // TODO: 删除里程碑时同步删除 Storage 文件。
+    await removeStoragePaths((mediaRows ?? []).map((row) => row.storage_path));
   },
   async saveGrowthMetric(context: RepositoryContext, input: SaveGrowthMetricInput) {
     if (context.isMockMode) {

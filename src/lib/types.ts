@@ -95,9 +95,14 @@ export interface TagOption {
 export interface BabyMember {
   id: string;
   babyId: string;
-  userId: string;
+  userId?: string | null;
+  inviteEmail: string;
+  displayName?: string | null;
   role: "owner" | "editor" | "viewer";
   status: "active" | "invited";
+  invitedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AppStoreSnapshot {
@@ -105,6 +110,7 @@ export interface AppStoreSnapshot {
   memories: MemoryRecord[];
   milestones: Milestone[];
   growthMetrics: GrowthMetric[];
+  babyMembers: BabyMember[];
 }
 
 export interface AppErrorState {
@@ -164,6 +170,14 @@ export interface SaveGrowthMetricInput {
   value: number;
   recordedOn: string;
   notes?: string;
+}
+
+export interface SaveBabyMemberInput {
+  id?: string;
+  babyId: string;
+  inviteEmail: string;
+  displayName?: string;
+  role: BabyMember["role"];
 }
 
 export interface AuthFormInput {

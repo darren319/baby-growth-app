@@ -16,12 +16,14 @@ import { appRepository } from "@/lib/repository/app-repository";
 import type {
   AppStoreSnapshot,
   Baby,
+  BabyMember,
   GrowthMetric,
   MediaAsset,
   MemoryRecord,
   Milestone,
   RepositoryContext,
   SaveBabyInput,
+  SaveBabyMemberInput,
   SaveGrowthMetricInput,
   SaveMemoryInput,
   SaveMilestoneInput,
@@ -32,6 +34,8 @@ interface AppDataContextValue {
   status: "idle" | "loading" | "ready" | "error";
   error: string | null;
   babies: Baby[];
+  babyMembers: BabyMember[];
+  selectedBabyMembers: BabyMember[];
   selectedBabyId: string | null;
   selectedBaby: Baby | null;
   memories: MemoryRecord[];
@@ -44,6 +48,8 @@ interface AppDataContextValue {
   setSelectedBabyId: (id: string) => void;
   refresh: () => Promise<void>;
   saveBaby: (input: SaveBabyInput) => Promise<void>;
+  inviteBabyMember: (input: SaveBabyMemberInput) => Promise<void>;
+  removeBabyMember: (memberId: string) => Promise<void>;
   saveMemory: (input: SaveMemoryInput) => Promise<void>;
   deleteMemory: (memoryId: string) => Promise<void>;
   saveMilestone: (input: SaveMilestoneInput) => Promise<void>;
@@ -60,6 +66,7 @@ const emptySnapshot: AppStoreSnapshot = {
   memories: [],
   milestones: [],
   growthMetrics: [],
+  babyMembers: [],
 };
 
 function storageKey(userId: string) {
@@ -160,6 +167,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       ),
     [selectedBaby, snapshot.growthMetrics],
   );
+  const scopedBabyMembers = useMemo(
+    () =>
+      snapshot.babyMembers.filter((member) =>
+        selectedBaby ? member.babyId === selectedBaby.id : true,
+      ),
+    [selectedBaby, snapshot.babyMembers],
+  );
 
   const galleryAssets = useMemo(
     () =>
@@ -206,6 +220,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       status: appStatus,
       error,
       babies: snapshot.babies,
+      babyMembers: snapshot.babyMembers,
+      selectedBabyMembers: scopedBabyMembers,
       selectedBabyId,
       selectedBaby,
       memories: scopedMemories,
@@ -219,6 +235,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       refresh,
       saveBaby: async (input) => {
         await withMutation((context) => appRepository.saveBaby(context, input), "宝宝档案已保存");
+      },
+      inviteBabyMember: async (input) => {
+        await withMutation(
+          (context) => appRepository.inviteBabyMember(context, input),
+          "家庭成员邀请已保存",
+        );
+      },
+      removeBabyMember: async (memberId) => {
+        await withMutation(
+          (context) => appRepository.removeBabyMember(context, memberId),
+          "家庭成员已移除",
+        );
       },
       saveMemory: async (input) => {
         await withMutation((context) => appRepository.saveMemory(context, input), "成长记录已保存");
@@ -268,12 +296,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       getContext,
       refresh,
       scopedGrowthMetrics,
+      scopedBabyMembers,
       scopedMemories,
       scopedMilestones,
       selectedBaby,
       selectedBabyId,
       setSelectedBabyId,
       snapshot.babies,
+      snapshot.babyMembers,
       withMutation,
     ],
   );

@@ -8,9 +8,9 @@ import { SectionHeading } from "@/components/ui/section-heading";
 const placeholderItems = [
   {
     icon: Users,
-    title: "家庭共享",
+    title: "家庭共享升级",
     description:
-      "TODO: 未来支持爸爸妈妈共同管理一个宝宝档案，并可给家庭成员分配 owner / editor / viewer 等角色。",
+      "已落地基础共享成员管理，TODO: 继续补邮件邀请、接受邀请流程，以及更细的 owner / editor / viewer 权限能力。",
   },
   {
     icon: Bot,

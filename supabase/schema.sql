@@ -104,13 +104,14 @@ create table if not exists public.memory_tags (
 create table if not exists public.baby_members (
   id uuid primary key default gen_random_uuid(),
   baby_id uuid not null references public.babies(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade,
+  invite_email text not null,
+  display_name text,
   role text not null default 'viewer' check (role in ('owner', 'editor', 'viewer')),
   status text not null default 'active' check (status in ('active', 'invited')),
   invited_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default timezone('utc', now()),
-  updated_at timestamptz not null default timezone('utc', now()),
-  constraint baby_members_unique unique (baby_id, user_id)
+  updated_at timestamptz not null default timezone('utc', now())
 );
 
 create index if not exists babies_user_id_idx on public.babies(user_id);
@@ -123,6 +124,8 @@ create index if not exists media_assets_baby_created_idx on public.media_assets(
 create index if not exists memory_tags_tag_id_idx on public.memory_tags(tag_id);
 create index if not exists baby_members_baby_idx on public.baby_members(baby_id);
 create index if not exists baby_members_user_idx on public.baby_members(user_id);
+create unique index if not exists baby_members_baby_email_unique on public.baby_members(baby_id, invite_email);
+create unique index if not exists baby_members_baby_user_unique on public.baby_members(baby_id, user_id) where user_id is not null;
 
 drop trigger if exists babies_set_updated_at on public.babies;
 create trigger babies_set_updated_at
@@ -348,7 +351,16 @@ using (
     select 1
     from public.memories
     where memories.id = memory_tags.memory_id
-      and memories.user_id = auth.uid()
+      and (
+        memories.user_id = auth.uid()
+        or exists (
+          select 1
+          from public.baby_members
+          where baby_members.baby_id = memories.baby_id
+            and baby_members.user_id = auth.uid()
+            and baby_members.status = 'active'
+        )
+      )
   )
 );
 
@@ -381,12 +393,26 @@ on public.baby_members
 for select
 using (
   auth.uid() = user_id
+  or lower(invite_email) = lower(auth.jwt() ->> 'email')
   or exists (
     select 1
     from public.babies
     where babies.id = baby_members.baby_id
       and babies.user_id = auth.uid()
   )
+);
+
+create policy "baby members invitee claim update"
+on public.baby_members
+for update
+using (
+  user_id is null
+  and lower(invite_email) = lower(auth.jwt() ->> 'email')
+)
+with check (
+  lower(invite_email) = lower(auth.jwt() ->> 'email')
+  and user_id = auth.uid()
+  and status = 'active'
 );
 
 create policy "baby members owner insert"

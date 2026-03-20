@@ -44,3 +44,9 @@ export const growthMetricSchema = z.object({
   recordedOn: z.string().min(1, "请选择记录日期"),
   notes: z.string().max(400, "备注最多 400 个字符").optional(),
 });
+
+export const babyMemberSchema = z.object({
+  inviteEmail: z.string().email("请输入正确的家庭成员邮箱"),
+  displayName: z.string().max(40, "称呼最多 40 个字符").optional(),
+  role: z.enum(["editor", "viewer"]),
+});

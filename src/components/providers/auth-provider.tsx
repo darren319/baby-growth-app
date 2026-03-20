@@ -11,6 +11,7 @@ interface AuthContextValue {
   isMockMode: boolean;
   signIn: (input: AuthFormInput) => Promise<void>;
   signUp: (input: AuthFormInput) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -63,6 +64,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const nextUser = await authRepository.signUp(input);
         setUser(nextUser);
         setStatus("authenticated");
+      },
+      async signInWithGoogle() {
+        const nextUser = await authRepository.signInWithGoogle();
+        if (nextUser) {
+          setUser(nextUser);
+          setStatus("authenticated");
+        }
       },
       async signOut() {
         await authRepository.signOut();

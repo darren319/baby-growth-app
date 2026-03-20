@@ -1,4 +1,13 @@
-import type { AppStoreSnapshot, AuthUser, Baby, GrowthMetric, MediaAsset, MemoryRecord, Milestone } from "@/lib/types";
+import type {
+  AppStoreSnapshot,
+  AuthUser,
+  Baby,
+  BabyMember,
+  GrowthMetric,
+  MediaAsset,
+  MemoryRecord,
+  Milestone,
+} from "@/lib/types";
 import { createSvgPlaceholder } from "@/lib/utils";
 
 const MOCK_AUTH_KEY = "baby-growth-auth";
@@ -273,7 +282,34 @@ function createSampleStore(user: AuthUser): AppStoreSnapshot {
     },
   ];
 
-  return { babies, memories, milestones, growthMetrics };
+  const babyMembers: BabyMember[] = [
+    {
+      id: "member-dad",
+      babyId: primaryBabyId,
+      userId: "mock-dad-user",
+      inviteEmail: "dad@example.com",
+      displayName: "爸爸",
+      role: "editor",
+      status: "active",
+      invitedBy: user.id,
+      createdAt: nowOffset(-40),
+      updatedAt: nowOffset(-18),
+    },
+    {
+      id: "member-grandma",
+      babyId: primaryBabyId,
+      userId: null,
+      inviteEmail: "grandma@example.com",
+      displayName: "外婆",
+      role: "viewer",
+      status: "invited",
+      invitedBy: user.id,
+      createdAt: nowOffset(-6),
+      updatedAt: nowOffset(-6),
+    },
+  ];
+
+  return { babies, memories, milestones, growthMetrics, babyMembers };
 }
 
 export function getMockMode() {
@@ -321,8 +357,14 @@ export function readMockStore(user: AuthUser): AppStoreSnapshot {
   }
 
   try {
-    const parsed = JSON.parse(raw) as AppStoreSnapshot;
-    return parsed;
+    const parsed = JSON.parse(raw) as Partial<AppStoreSnapshot>;
+    return {
+      babies: parsed.babies ?? [],
+      memories: parsed.memories ?? [],
+      milestones: parsed.milestones ?? [],
+      growthMetrics: parsed.growthMetrics ?? [],
+      babyMembers: parsed.babyMembers ?? [],
+    };
   } catch {
     const seed = createSampleStore(user);
     writeMockStore(user, seed);

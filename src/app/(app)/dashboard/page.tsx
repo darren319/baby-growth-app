@@ -262,8 +262,8 @@ export default function DashboardPage() {
                   title="AI 成长周报"
                 />
                 <FuturePlaceholder
-                  description="未来支持爸爸妈妈共同维护同一个宝宝档案，并细化角色权限。"
-                  title="家庭共享"
+                  description="已提供基础家庭共享页，后续继续补充接受邀请、通知和更细的角色权限。"
+                  title="家庭共享升级"
                 />
                 <FuturePlaceholder
                   description="预留疫苗、体检、生日和纪念日提醒入口。"

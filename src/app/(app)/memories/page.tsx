@@ -22,11 +22,12 @@ const defaultFilters: MemoryFilters = {
   favoritesOnly: false,
   pinnedOnly: false,
 };
+const PAGE_SIZE = 6;
 
 export default function MemoriesPage() {
   const { status, memories, availableTags, selectedBaby, deleteMemory } = useAppData();
   const [filters, setFilters] = useState<MemoryFilters>(defaultFilters);
-  const [visibleCount, setVisibleCount] = useState(6);
+  const [currentPage, setCurrentPage] = useState(1);
   const [formOpen, setFormOpen] = useState(false);
   const [editingMemory, setEditingMemory] = useState<MemoryRecord | null>(null);
   const [detailMemory, setDetailMemory] = useState<MemoryRecord | null>(null);
@@ -65,9 +66,19 @@ export default function MemoriesPage() {
       });
   }, [filters, memories]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredMemories.length / PAGE_SIZE));
+  const currentPageItems = filteredMemories.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+
   useEffect(() => {
-    setVisibleCount(6);
-  }, [filters]);
+    setCurrentPage(1);
+  }, [filters, selectedBaby?.id]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   if (status === "loading" || status === "idle") {
     return <LoadingState label="正在加载成长记录..." />;
@@ -173,7 +184,14 @@ export default function MemoriesPage() {
 
         {filteredMemories.length > 0 ? (
           <div className="space-y-4">
-            {filteredMemories.slice(0, visibleCount).map((memory) => (
+            <div className="flex items-center justify-between gap-3 rounded-[24px] bg-[#fff8f2] px-4 py-3 text-sm text-slate-500">
+              <span>共 {filteredMemories.length} 条记录</span>
+              <span>
+                第 {currentPage} / {totalPages} 页
+              </span>
+            </div>
+
+            {currentPageItems.map((memory) => (
               <MemoryCard
                 key={memory.id}
                 memory={memory}
@@ -186,16 +204,28 @@ export default function MemoriesPage() {
               />
             ))}
 
-            {visibleCount < filteredMemories.length ? (
+            <div className="grid grid-cols-2 gap-3">
               <Button
+                disabled={currentPage <= 1}
                 fullWidth
-                onClick={() => setVisibleCount((current) => current + 6)}
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                 type="button"
                 variant="secondary"
               >
-                加载更多
+                上一页
               </Button>
-            ) : null}
+              <Button
+                disabled={currentPage >= totalPages}
+                fullWidth
+                onClick={() =>
+                  setCurrentPage((page) => Math.min(totalPages, page + 1))
+                }
+                type="button"
+                variant="secondary"
+              >
+                下一页
+              </Button>
+            </div>
           </div>
         ) : (
           <EmptyState

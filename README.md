@@ -3,7 +3,9 @@
 一个面向新手父母的 Next.js MVP，支持：
 
 - 邮箱注册 / 登录
+- Google 登录入口
 - 多宝宝档案管理
+- 家庭共享基础版
 - 成长记录 CRUD
 - 图片 / 视频上传
 - 时间轴回顾
@@ -93,6 +95,7 @@ src/
     (app)/memories
     (app)/timeline
     (app)/gallery
+    (app)/family
     (app)/milestones
     (app)/growth
     (app)/future
@@ -153,8 +156,10 @@ npm run mobile:sync
 已完成：
 
 - 登录 / 注册页
+- Google OAuth 登录入口
 - Dashboard 首页
 - 宝宝档案管理
+- 家庭共享基础成员管理
 - 成长记录 CRUD
 - 图片 / 视频媒体管理
 - 时间轴页
@@ -167,15 +172,15 @@ npm run mobile:sync
 
 已预留 TODO：
 
-- 家庭共享角色权限
 - AI 自动成长周报
 - AI 自动打标签
 - AI 成长年册
 - 疫苗 / 体检 / 生日 / 纪念日提醒
-- 删除记录后同步删除 Storage 对象
+- 家庭共享接受邀请 / 邮件通知 / 更细粒度权限
 
 ## 说明
 
 - 当前为了兼容静态导出与 Capacitor，认证和数据加载采用客户端模式
 - 未配置 Supabase 时，登录会走本地演示模式
 - 视频在演示模式下以占位封面为主，正式接入 Supabase Storage 后可使用真实播放链接
+- 如果你之前已经执行过旧版 `schema.sql`，升级后请重新补齐 `baby_members` 的 `invite_email`、`display_name` 和相关 policy
