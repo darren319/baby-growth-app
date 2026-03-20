@@ -13,7 +13,7 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import type { Milestone } from "@/lib/types";
 
 export default function MilestonesPage() {
-  const { status, milestones, selectedBaby, deleteMilestone } = useAppData();
+  const { status, milestones, selectedBaby, permissions, deleteMilestone } = useAppData();
   const [formOpen, setFormOpen] = useState(false);
   const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
 
@@ -35,19 +35,25 @@ export default function MilestonesPage() {
       <div className="space-y-6">
         <SectionHeading
           action={
-            <Button
-              onClick={() => {
-                setEditingMilestone(null);
-                setFormOpen(true);
-              }}
-              type="button"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              新增里程碑
-            </Button>
+            permissions.canEditContent ? (
+              <Button
+                onClick={() => {
+                  setEditingMilestone(null);
+                  setFormOpen(true);
+                }}
+                type="button"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                新增里程碑
+              </Button>
+            ) : null
           }
           eyebrow="Milestones"
-          description="适合记录第一次翻身、第一次叫爸爸妈妈、第一次走路等关键事件。"
+          description={
+            permissions.canEditContent
+              ? "适合记录第一次翻身、第一次叫爸爸妈妈、第一次走路等关键事件。"
+              : "当前共享角色为只读，里程碑仍可完整浏览和回顾。"
+          }
           title={`${selectedBaby.name} 的里程碑`}
         />
 
@@ -61,8 +67,15 @@ export default function MilestonesPage() {
                     {milestone.happenedAt.slice(0, 10)}
                   </div>
                   <MilestoneCard
+                    canManage={permissions.canEditContent}
                     milestone={milestone}
-                    onDelete={() => void deleteMilestone(milestone.id)}
+                    onDelete={() => {
+                      if (
+                        window.confirm("删除后关联的图片和视频也会一起清理，确认继续吗？")
+                      ) {
+                        void deleteMilestone(milestone.id);
+                      }
+                    }}
                     onEdit={() => {
                       setEditingMilestone(milestone);
                       setFormOpen(true);
@@ -73,9 +86,9 @@ export default function MilestonesPage() {
           </div>
         ) : (
           <EmptyState
-            actionLabel="新增里程碑"
+            actionLabel={permissions.canEditContent ? "新增里程碑" : undefined}
             description="把那些真正想多年后再翻出来看的瞬间，单独存进里程碑里。"
-            onAction={() => setFormOpen(true)}
+            onAction={permissions.canEditContent ? () => setFormOpen(true) : undefined}
             title="还没有里程碑内容"
           />
         )}
@@ -88,7 +101,7 @@ export default function MilestonesPage() {
           setEditingMilestone(null);
           setFormOpen(false);
         }}
-        open={formOpen}
+        open={formOpen && permissions.canEditContent}
       />
     </>
   );

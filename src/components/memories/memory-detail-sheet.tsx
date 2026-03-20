@@ -14,11 +14,13 @@ export function MemoryDetailSheet({
   memory,
   onClose,
   onEdit,
+  canEdit = true,
 }: {
   open: boolean;
   memory: MemoryRecord | null;
   onClose: () => void;
   onEdit?: () => void;
+  canEdit?: boolean;
 }) {
   if (!memory) return null;
 
@@ -65,7 +67,7 @@ export function MemoryDetailSheet({
           </div>
         ) : null}
 
-        {onEdit ? (
+        {onEdit && canEdit ? (
           <Button fullWidth onClick={onEdit} type="button">
             编辑这条记录
           </Button>

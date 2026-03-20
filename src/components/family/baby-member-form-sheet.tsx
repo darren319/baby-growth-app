@@ -48,7 +48,7 @@ export function BabyMemberFormSheet({
 
   return (
     <Drawer
-      description="基础版先记录共享成员和角色，后续再补邮件邀请、接受邀请和更细粒度权限。"
+      description="保存后，对方会在家庭共享页看到待处理邀请；接受后会根据角色获得查看或编辑权限。"
       onClose={onClose}
       open={open}
       title="邀请家庭成员"
@@ -101,13 +101,13 @@ export function BabyMemberFormSheet({
         </div>
 
         <div className="rounded-[24px] bg-[#fff8f2] p-4 text-sm leading-6 text-slate-500">
-          当前基础版说明：
+          当前共享规则：
           <br />
-          1. 拥有者可以管理共享成员。
+          1. 编辑者可以维护记录、里程碑和成长数据。
           <br />
-          2. 邀请记录会先保存到数据库。
+          2. 查看者保持只读浏览。
           <br />
-          3. 真实邮件通知与接受邀请流程后续补充。
+          3. TODO: 后续继续补邮件通知和邀请链接。
         </div>
 
         <div className="flex gap-3 pt-2">

@@ -105,6 +105,19 @@ export interface BabyMember {
   updatedAt: string;
 }
 
+export interface IncomingInvite {
+  member: BabyMember;
+  baby?: Baby | null;
+}
+
+export interface BabyPermissions {
+  role: BabyMember["role"] | null;
+  canEditContent: boolean;
+  canEditProfile: boolean;
+  canManageMembers: boolean;
+  isReadOnly: boolean;
+}
+
 export interface AppStoreSnapshot {
   babies: Baby[];
   memories: MemoryRecord[];
@@ -178,6 +191,11 @@ export interface SaveBabyMemberInput {
   inviteEmail: string;
   displayName?: string;
   role: BabyMember["role"];
+}
+
+export interface UpdateBabyMemberRoleInput {
+  memberId: string;
+  role: Extract<BabyMember["role"], "editor" | "viewer">;
 }
 
 export interface AuthFormInput {

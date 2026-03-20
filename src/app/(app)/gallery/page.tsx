@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingState } from "@/components/ui/loading-state";
 import { SectionHeading } from "@/components/ui/section-heading";
 import type { MediaAsset, MemoryRecord } from "@/lib/types";
-import { formatDate, monthKey } from "@/lib/utils";
+import { formatDate, formatMonth, groupByMonth, monthKey } from "@/lib/utils";
 
 export default function GalleryPage() {
   const { status, galleryAssets, memories, milestones, selectedBaby } = useAppData();
@@ -33,6 +33,16 @@ export default function GalleryPage() {
       return matchesKind && matchesMonth;
     });
   }, [galleryAssets, kindFilter, monthFilter]);
+
+  const groupedAssets = useMemo(() => {
+    const grouped = groupByMonth(filteredAssets);
+    return Object.keys(grouped)
+      .sort((a, b) => b.localeCompare(a))
+      .map((month) => ({
+        month,
+        assets: grouped[month].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      }));
+  }, [filteredAssets]);
 
   const parentMemory = selectedAsset
     ? memories.find((memory) => memory.id === selectedAsset.memoryId)
@@ -59,7 +69,7 @@ export default function GalleryPage() {
       <div className="space-y-6">
         <SectionHeading
           eyebrow="Gallery"
-          description="聚合成长记录和里程碑里的全部图片 / 视频，支持按类型和月份筛选。"
+          description="聚合成长记录和里程碑里的全部图片 / 视频，支持按类型、月份筛选并按月份分组回看。"
           title={`${selectedBaby.name} 的成长相册`}
         />
 
@@ -98,16 +108,35 @@ export default function GalleryPage() {
         </div>
 
         {filteredAssets.length > 0 ? (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-            {filteredAssets.map((asset) => (
-              <button
-                key={asset.id}
-                className="text-left"
-                onClick={() => setSelectedAsset(asset)}
-                type="button"
-              >
-                <MediaThumb asset={asset} className="aspect-square" />
-              </button>
+          <div className="space-y-6">
+            <div className="flex flex-wrap gap-2">
+              <Badge className="bg-[#fff3ea] text-[#a76446]">
+                当前共 {filteredAssets.length} 个媒体内容
+              </Badge>
+              {monthFilter ? <Badge>{monthFilter}</Badge> : null}
+            </div>
+
+            {groupedAssets.map((group) => (
+              <section key={group.month} className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-black tracking-tight text-slate-900">
+                    {formatMonth(`${group.month}-01`)}
+                  </h3>
+                  <Badge>{group.assets.length} 项</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+                  {group.assets.map((asset) => (
+                    <button
+                      key={asset.id}
+                      className="text-left"
+                      onClick={() => setSelectedAsset(asset)}
+                      type="button"
+                    >
+                      <MediaThumb asset={asset} className="aspect-square" />
+                    </button>
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         ) : (

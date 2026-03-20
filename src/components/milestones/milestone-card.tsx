@@ -11,10 +11,12 @@ export function MilestoneCard({
   milestone,
   onEdit,
   onDelete,
+  canManage = true,
 }: {
   milestone: Milestone;
   onEdit: () => void;
   onDelete: () => void;
+  canManage?: boolean;
 }) {
   return (
     <Card className="space-y-4">
@@ -55,16 +57,18 @@ export function MilestoneCard({
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-2">
-        <Button onClick={onEdit} type="button">
-          <Pencil className="mr-2 h-4 w-4" />
-          编辑
-        </Button>
-        <Button onClick={onDelete} type="button" variant="danger">
-          <Trash2 className="mr-2 h-4 w-4" />
-          删除
-        </Button>
-      </div>
+      {canManage ? (
+        <div className="grid grid-cols-2 gap-2">
+          <Button onClick={onEdit} type="button">
+            <Pencil className="mr-2 h-4 w-4" />
+            编辑
+          </Button>
+          <Button onClick={onDelete} type="button" variant="danger">
+            <Trash2 className="mr-2 h-4 w-4" />
+            删除
+          </Button>
+        </div>
+      ) : null}
     </Card>
   );
 }

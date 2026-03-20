@@ -10,6 +10,12 @@ import {
   type ReactNode,
 } from "react";
 
+import {
+  canUserAccessBaby,
+  isIncomingBabyInvite,
+  resolveBabyPermissions,
+  resolveBabyRole,
+} from "@/lib/access";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { appRepository } from "@/lib/repository/app-repository";
@@ -17,7 +23,9 @@ import type {
   AppStoreSnapshot,
   Baby,
   BabyMember,
+  BabyPermissions,
   GrowthMetric,
+  IncomingInvite,
   MediaAsset,
   MemoryRecord,
   Milestone,
@@ -27,6 +35,7 @@ import type {
   SaveGrowthMetricInput,
   SaveMemoryInput,
   SaveMilestoneInput,
+  UpdateBabyMemberRoleInput,
 } from "@/lib/types";
 import { unique } from "@/lib/utils";
 
@@ -35,9 +44,12 @@ interface AppDataContextValue {
   error: string | null;
   babies: Baby[];
   babyMembers: BabyMember[];
+  incomingInvites: IncomingInvite[];
   selectedBabyMembers: BabyMember[];
   selectedBabyId: string | null;
   selectedBaby: Baby | null;
+  selectedBabyRole: BabyPermissions["role"];
+  permissions: BabyPermissions;
   memories: MemoryRecord[];
   milestones: Milestone[];
   growthMetrics: GrowthMetric[];
@@ -49,6 +61,9 @@ interface AppDataContextValue {
   refresh: () => Promise<void>;
   saveBaby: (input: SaveBabyInput) => Promise<void>;
   inviteBabyMember: (input: SaveBabyMemberInput) => Promise<void>;
+  updateBabyMemberRole: (input: UpdateBabyMemberRoleInput) => Promise<void>;
+  acceptBabyInvite: (memberId: string) => Promise<void>;
+  declineBabyInvite: (memberId: string) => Promise<void>;
   removeBabyMember: (memberId: string) => Promise<void>;
   saveMemory: (input: SaveMemoryInput) => Promise<void>;
   deleteMemory: (memoryId: string) => Promise<void>;
@@ -101,18 +116,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
     try {
       const nextSnapshot = await appRepository.getSnapshot(context);
+      const accessibleBabies = nextSnapshot.babies.filter((baby) =>
+        canUserAccessBaby(context.user, baby, nextSnapshot.babyMembers),
+      );
+
       setSnapshot(nextSnapshot);
       setAppStatus("ready");
 
       if (typeof window !== "undefined") {
         const storedBabyId = window.localStorage.getItem(storageKey(context.user.id));
         const defaultBabyId =
-          storedBabyId && nextSnapshot.babies.some((baby) => baby.id === storedBabyId)
+          storedBabyId && accessibleBabies.some((baby) => baby.id === storedBabyId)
             ? storedBabyId
-            : nextSnapshot.babies[0]?.id ?? null;
+            : accessibleBabies[0]?.id ?? null;
         setSelectedBabyIdState(defaultBabyId);
       } else {
-        setSelectedBabyIdState(nextSnapshot.babies[0]?.id ?? null);
+        setSelectedBabyIdState(accessibleBabies[0]?.id ?? null);
       }
     } catch (nextError) {
       setAppStatus("error");
@@ -143,8 +162,37 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [user],
   );
 
+  const babies = useMemo(
+    () =>
+      snapshot.babies.filter((baby) =>
+        canUserAccessBaby(user, baby, snapshot.babyMembers),
+      ),
+    [snapshot.babies, snapshot.babyMembers, user],
+  );
+
   const selectedBaby =
-    snapshot.babies.find((baby) => baby.id === selectedBabyId) ?? snapshot.babies[0] ?? null;
+    babies.find((baby) => baby.id === selectedBabyId) ?? babies[0] ?? null;
+
+  const selectedBabyRole = useMemo(
+    () => resolveBabyRole(user, selectedBaby, snapshot.babyMembers),
+    [selectedBaby, snapshot.babyMembers, user],
+  );
+
+  const permissions = useMemo(
+    () => resolveBabyPermissions(selectedBabyRole),
+    [selectedBabyRole],
+  );
+
+  const incomingInvites = useMemo(
+    () =>
+      snapshot.babyMembers
+        .filter((member) => isIncomingBabyInvite(user, member))
+        .map((member) => ({
+          member,
+          baby: snapshot.babies.find((baby) => baby.id === member.babyId) ?? null,
+        })),
+    [snapshot.babyMembers, snapshot.babies, user],
+  );
 
   const scopedMemories = useMemo(
     () =>
@@ -153,6 +201,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       ),
     [selectedBaby, snapshot.memories],
   );
+
   const scopedMilestones = useMemo(
     () =>
       snapshot.milestones.filter((milestone) =>
@@ -160,6 +209,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       ),
     [selectedBaby, snapshot.milestones],
   );
+
   const scopedGrowthMetrics = useMemo(
     () =>
       snapshot.growthMetrics.filter((metric) =>
@@ -167,6 +217,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       ),
     [selectedBaby, snapshot.growthMetrics],
   );
+
   const scopedBabyMembers = useMemo(
     () =>
       snapshot.babyMembers.filter((member) =>
@@ -219,11 +270,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     () => ({
       status: appStatus,
       error,
-      babies: snapshot.babies,
+      babies,
       babyMembers: snapshot.babyMembers,
+      incomingInvites,
       selectedBabyMembers: scopedBabyMembers,
       selectedBabyId,
       selectedBaby,
+      selectedBabyRole,
+      permissions,
       memories: scopedMemories,
       milestones: scopedMilestones,
       growthMetrics: scopedGrowthMetrics,
@@ -242,6 +296,24 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           "家庭成员邀请已保存",
         );
       },
+      updateBabyMemberRole: async (input) => {
+        await withMutation(
+          (context) => appRepository.updateBabyMemberRole(context, input),
+          "家庭成员角色已更新",
+        );
+      },
+      acceptBabyInvite: async (memberId) => {
+        await withMutation(
+          (context) => appRepository.acceptBabyInvite(context, memberId),
+          "共享邀请已接受",
+        );
+      },
+      declineBabyInvite: async (memberId) => {
+        await withMutation(
+          (context) => appRepository.declineBabyInvite(context, memberId),
+          "共享邀请已拒绝",
+        );
+      },
       removeBabyMember: async (memberId) => {
         await withMutation(
           (context) => appRepository.removeBabyMember(context, memberId),
@@ -254,7 +326,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       deleteMemory: async (memoryId) => {
         await withMutation(
           (context) => appRepository.deleteMemory(context, memoryId),
-          "成长记录已删除",
+          "成长记录已删除，关联媒体会同步清理",
         );
       },
       saveMilestone: async (input) => {
@@ -266,7 +338,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       deleteMilestone: async (milestoneId) => {
         await withMutation(
           (context) => appRepository.deleteMilestone(context, milestoneId),
-          "里程碑已删除",
+          "里程碑已删除，关联媒体会同步清理",
         );
       },
       saveGrowthMetric: async (input) => {
@@ -291,18 +363,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [
       appStatus,
       availableTags,
+      babies,
       error,
       galleryAssets,
       getContext,
+      incomingInvites,
+      permissions,
       refresh,
-      scopedGrowthMetrics,
       scopedBabyMembers,
+      scopedGrowthMetrics,
       scopedMemories,
       scopedMilestones,
       selectedBaby,
       selectedBabyId,
+      selectedBabyRole,
       setSelectedBabyId,
-      snapshot.babies,
       snapshot.babyMembers,
       withMutation,
     ],

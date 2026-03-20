@@ -6,6 +6,7 @@ import { Plus } from "lucide-react";
 import { BabyCard } from "@/components/babies/baby-card";
 import { BabyFormSheet } from "@/components/babies/baby-form-sheet";
 import { useAppData } from "@/components/providers/app-data-provider";
+import { useAuth } from "@/components/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingState } from "@/components/ui/loading-state";
@@ -14,6 +15,7 @@ import type { Baby } from "@/lib/types";
 
 export default function BabiesPage() {
   const { status, babies, selectedBabyId, setSelectedBabyId } = useAppData();
+  const { user } = useAuth();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingBaby, setEditingBaby] = useState<Baby | null>(null);
 
@@ -38,7 +40,7 @@ export default function BabiesPage() {
             </Button>
           }
           eyebrow="Babies"
-          description="每个父母账号可以先维护 1 个或多个宝宝档案，后续家庭共享会沿着这个结构扩展。"
+          description="你可以维护自己的宝宝档案；通过家庭共享加入的档案也会在这里展示，但资料编辑仍由拥有者处理。"
           title="宝宝档案管理"
         />
 
@@ -49,10 +51,14 @@ export default function BabiesPage() {
                 key={baby.id}
                 active={selectedBabyId === baby.id}
                 baby={baby}
-                onEdit={() => {
-                  setEditingBaby(baby);
-                  setSheetOpen(true);
-                }}
+                onEdit={
+                  baby.userId === user?.id
+                    ? () => {
+                        setEditingBaby(baby);
+                        setSheetOpen(true);
+                      }
+                    : undefined
+                }
                 onSelect={() => setSelectedBabyId(baby.id)}
               />
             ))}

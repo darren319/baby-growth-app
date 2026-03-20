@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Select } from "@/components/ui/field";
 import { LoadingState } from "@/components/ui/loading-state";
 import { SectionHeading } from "@/components/ui/section-heading";
 import type { MemoryRecord } from "@/lib/types";
@@ -16,10 +17,24 @@ import { firstMediaPreview, formatDate, formatDateTime, monthKey } from "@/lib/u
 export default function TimelinePage() {
   const { status, memories, selectedBaby } = useAppData();
   const [mode, setMode] = useState<"day" | "month">("day");
+  const [monthFilter, setMonthFilter] = useState("");
   const [detailMemory, setDetailMemory] = useState<MemoryRecord | null>(null);
 
+  const monthOptions = useMemo(
+    () => Array.from(new Set(memories.map((memory) => monthKey(memory.recordedAt)))),
+    [memories],
+  );
+
+  const filteredMemories = useMemo(
+    () =>
+      memories.filter((memory) =>
+        monthFilter ? monthKey(memory.recordedAt) === monthFilter : true,
+      ),
+    [memories, monthFilter],
+  );
+
   const groups = useMemo(() => {
-    return memories.reduce<Record<string, MemoryRecord[]>>((acc, memory) => {
+    return filteredMemories.reduce<Record<string, MemoryRecord[]>>((acc, memory) => {
       const key = mode === "day" ? formatDate(memory.recordedAt) : monthKey(memory.recordedAt);
       if (!acc[key]) {
         acc[key] = [];
@@ -27,7 +42,7 @@ export default function TimelinePage() {
       acc[key].push(memory);
       return acc;
     }, {});
-  }, [memories, mode]);
+  }, [filteredMemories, mode]);
 
   const keys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
 
@@ -49,31 +64,52 @@ export default function TimelinePage() {
       <div className="space-y-6">
         <SectionHeading
           action={
-            <div className="grid grid-cols-2 gap-2 rounded-[24px] bg-[#fff6ef] p-1.5">
-              <button
-                className={`rounded-[18px] px-4 py-2 text-sm font-semibold transition ${
-                  mode === "day" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
-                }`}
-                onClick={() => setMode("day")}
-                type="button"
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 rounded-[24px] bg-[#fff6ef] p-1.5">
+                <button
+                  className={`rounded-[18px] px-4 py-2 text-sm font-semibold transition ${
+                    mode === "day" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
+                  }`}
+                  onClick={() => setMode("day")}
+                  type="button"
+                >
+                  按日查看
+                </button>
+                <button
+                  className={`rounded-[18px] px-4 py-2 text-sm font-semibold transition ${
+                    mode === "month" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
+                  }`}
+                  onClick={() => setMode("month")}
+                  type="button"
+                >
+                  按月查看
+                </button>
+              </div>
+              <Select
+                onChange={(event) => setMonthFilter(event.target.value)}
+                value={monthFilter}
               >
-                按日查看
-              </button>
-              <button
-                className={`rounded-[18px] px-4 py-2 text-sm font-semibold transition ${
-                  mode === "month" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
-                }`}
-                onClick={() => setMode("month")}
-                type="button"
-              >
-                按月查看
-              </button>
+                <option value="">全部月份</option>
+                {monthOptions.map((month) => (
+                  <option key={month} value={month}>
+                    {month}
+                  </option>
+                ))}
+              </Select>
             </div>
           }
           eyebrow="Timeline"
-          description="把日常记录按时间顺序串起来，适合晚上一家人一起回看。"
+          description="把日常记录按时间顺序串起来，支持切换日 / 月视图和按月份快速回看。"
           title={`${selectedBaby.name} 的成长时间轴`}
         />
+
+        <div className="flex flex-wrap gap-2">
+          <Badge className="bg-[#fff3ea] text-[#a76446]">
+            当前共 {filteredMemories.length} 条记录
+          </Badge>
+          <Badge>{mode === "day" ? "按天编排" : "按月编排"}</Badge>
+          {monthFilter ? <Badge>{monthFilter}</Badge> : null}
+        </div>
 
         {keys.length > 0 ? (
           <div className="space-y-5">

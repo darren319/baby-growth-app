@@ -1,12 +1,14 @@
 import type { AuthChangeEvent, User } from "@supabase/supabase-js";
 
+import { normalizeEmail, resolveBabyRole } from "@/lib/access";
 import { MEMORY_TAG_PRESETS, STORAGE_BUCKET } from "@/lib/constants";
 import {
   getMockMode,
   readMockAuthUser,
+  readMockGlobalStore,
   readMockStore,
   writeMockAuthUser,
-  writeMockStore,
+  writeMockGlobalStore,
 } from "@/lib/mock-data";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type {
@@ -26,6 +28,7 @@ import type {
   SaveMemoryInput,
   SaveMilestoneInput,
   TagOption,
+  UpdateBabyMemberRoleInput,
 } from "@/lib/types";
 import {
   createSvgPlaceholder,
@@ -123,10 +126,6 @@ interface BabyMemberRow {
   invited_by: string | null;
   created_at: string;
   updated_at: string;
-}
-
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
 }
 
 function normalizeUser(user: User | AuthUser | null): AuthUser | null {
@@ -287,6 +286,36 @@ function mapBabyMember(row: BabyMemberRow): BabyMember {
   };
 }
 
+function getMockMutationStore(user: AuthUser) {
+  return readMockGlobalStore(user);
+}
+
+function ensureMockCanEditContent(
+  user: AuthUser,
+  store: AppStoreSnapshot,
+  babyId: string,
+) {
+  const baby = store.babies.find((item) => item.id === babyId);
+  const role = resolveBabyRole(user, baby, store.babyMembers);
+
+  if (role !== "owner" && role !== "editor") {
+    throw new Error("当前共享角色只有查看权限，暂时不能编辑内容");
+  }
+}
+
+function ensureMockCanManageBaby(
+  user: AuthUser,
+  store: AppStoreSnapshot,
+  babyId: string,
+) {
+  const baby = store.babies.find((item) => item.id === babyId);
+  const role = resolveBabyRole(user, baby, store.babyMembers);
+
+  if (role !== "owner") {
+    throw new Error("只有档案拥有者可以管理宝宝资料和家庭成员");
+  }
+}
+
 function requireSupabase() {
   const client = getSupabaseBrowserClient();
   if (!client) {
@@ -303,7 +332,7 @@ async function uploadToStorage(
 ) {
   const supabase = requireSupabase();
   const ext = file.name.split(".").pop() ?? "bin";
-  const storagePath = `${user.id}/${babyId}/${relationType}/${safeId()}.${ext}`;
+  const storagePath = `${babyId}/${user.id}/${relationType}/${safeId()}.${ext}`;
   const { error } = await supabase.storage
     .from(STORAGE_BUCKET)
     .upload(storagePath, file, {
@@ -332,25 +361,11 @@ async function removeStoragePaths(paths: Array<string | null | undefined>) {
   }
 
   const supabase = requireSupabase();
-  await supabase.storage.from(STORAGE_BUCKET).remove(storagePaths);
-}
-
-async function claimPendingFamilyInvites(user: AuthUser) {
-  if (getMockMode() || !user.email) {
-    return;
+  try {
+    await supabase.storage.from(STORAGE_BUCKET).remove(storagePaths);
+  } catch (error) {
+    console.warn("storage cleanup skipped", error);
   }
-
-  const supabase = requireSupabase();
-  await supabase
-    .from("baby_members")
-    .update({
-      user_id: user.id,
-      status: "active",
-      display_name: user.fullName ?? null,
-    })
-    .eq("invite_email", normalizeEmail(user.email))
-    .is("user_id", null)
-    .eq("status", "invited");
 }
 
 async function upsertMemoryTags(user: AuthUser, memoryId: string, tags: string[]) {
@@ -517,11 +532,7 @@ export const authRepository = {
     const {
       data: { session },
     } = await supabase.auth.getSession();
-    const currentUser = normalizeUser(session?.user ?? null);
-    if (currentUser) {
-      await claimPendingFamilyInvites(currentUser);
-    }
-    return currentUser;
+    return normalizeUser(session?.user ?? null);
   },
   subscribe(callback: (event: AuthChangeEvent, user: AuthUser | null) => void) {
     if (getMockMode()) {
@@ -541,7 +552,7 @@ export const authRepository = {
     if (getMockMode()) {
       const user = createMockUser(input);
       writeMockAuthUser(user);
-      readMockStore(user);
+      readMockGlobalStore(user);
       return user;
     }
 
@@ -555,15 +566,13 @@ export const authRepository = {
       throw error;
     }
 
-    const nextUser = normalizeUser(data.user)!;
-    await claimPendingFamilyInvites(nextUser);
-    return nextUser;
+    return normalizeUser(data.user)!;
   },
   async signUp(input: AuthFormInput) {
     if (getMockMode()) {
       const user = createMockUser(input);
       writeMockAuthUser(user);
-      readMockStore(user);
+      readMockGlobalStore(user);
       return user;
     }
 
@@ -582,9 +591,7 @@ export const authRepository = {
       throw error;
     }
 
-    const nextUser = normalizeUser(data.user)!;
-    await claimPendingFamilyInvites(nextUser);
-    return nextUser;
+    return normalizeUser(data.user)!;
   },
   async signInWithGoogle() {
     if (getMockMode()) {
@@ -594,7 +601,7 @@ export const authRepository = {
         fullName: "Google 家长",
       });
       writeMockAuthUser(user);
-      readMockStore(user);
+      readMockGlobalStore(user);
       return user;
     }
 
@@ -642,8 +649,6 @@ export const appRepository = {
     }
 
     const supabase = requireSupabase();
-    await claimPendingFamilyInvites(context.user);
-
     const [babiesRes, memoriesRes, milestonesRes, growthRes, membersRes] = await Promise.all([
       supabase
         .from("babies")
@@ -680,7 +685,10 @@ export const appRepository = {
   },
   async saveBaby(context: RepositoryContext, input: SaveBabyInput) {
     if (context.isMockMode) {
-      const store = readMockStore(context.user);
+      const store = getMockMutationStore(context.user);
+      if (input.id) {
+        ensureMockCanManageBaby(context.user, store, input.id);
+      }
       const avatarUrl = input.avatarFile
         ? await fileToDataUrl(input.avatarFile)
         : (input.avatarUrl ?? undefined);
@@ -702,15 +710,15 @@ export const appRepository = {
       const babies = existing
         ? store.babies.map((baby) => (baby.id === existing.id ? nextBaby : baby))
         : [nextBaby, ...store.babies];
-      writeMockStore(context.user, { ...store, babies });
+      writeMockGlobalStore({ ...store, babies });
       return;
     }
 
     const supabase = requireSupabase();
     let avatarUrl = input.avatarUrl ?? null;
+    const babyId = input.id ?? safeId();
 
     if (input.avatarFile) {
-      const babyId = input.id ?? safeId();
       const uploaded = await uploadToStorage(
         context.user,
         babyId,
@@ -721,8 +729,6 @@ export const appRepository = {
     }
 
     const payload = {
-      id: input.id,
-      user_id: context.user.id,
       name: input.name,
       nickname: input.nickname || null,
       gender: input.gender,
@@ -736,8 +742,11 @@ export const appRepository = {
           .from("babies")
           .update(payload)
           .eq("id", input.id)
-          .eq("user_id", context.user.id)
-      : supabase.from("babies").insert({ ...payload, id: safeId() });
+      : supabase.from("babies").insert({
+          id: babyId,
+          user_id: context.user.id,
+          ...payload,
+        });
 
     const { error } = await query;
     if (error) {
@@ -746,7 +755,8 @@ export const appRepository = {
   },
   async saveMemory(context: RepositoryContext, input: SaveMemoryInput) {
     if (context.isMockMode) {
-      const store = readMockStore(context.user);
+      const store = getMockMutationStore(context.user);
+      ensureMockCanEditContent(context.user, store, input.babyId);
       const existing = store.memories.find((memory) => memory.id === input.id);
       const memoryId = input.id ?? safeId();
       const media = [
@@ -780,13 +790,12 @@ export const appRepository = {
           )
         : [nextMemory, ...store.memories];
 
-      writeMockStore(context.user, { ...store, memories });
+      writeMockGlobalStore({ ...store, memories });
       return;
     }
 
     const supabase = requireSupabase();
     const payload = {
-      user_id: context.user.id,
       baby_id: input.babyId,
       title: input.title,
       recorded_at: input.recordedAt,
@@ -802,14 +811,13 @@ export const appRepository = {
       const { error } = await supabase
         .from("memories")
         .update(payload)
-        .eq("id", input.id)
-        .eq("user_id", context.user.id);
+        .eq("id", input.id);
       if (error) throw error;
     } else {
       memoryId = safeId();
       const { error } = await supabase
         .from("memories")
-        .insert({ id: memoryId, ...payload });
+        .insert({ id: memoryId, user_id: context.user.id, ...payload });
       if (error) throw error;
     }
 
@@ -818,10 +826,20 @@ export const appRepository = {
   },
   async deleteMemory(context: RepositoryContext, memoryId: string) {
     if (context.isMockMode) {
-      const store = readMockStore(context.user);
-      writeMockStore(context.user, {
+      const store = getMockMutationStore(context.user);
+      const target = store.memories.find((memory) => memory.id === memoryId);
+      if (!target) {
+        throw new Error("要删除的成长记录不存在");
+      }
+
+      ensureMockCanEditContent(context.user, store, target.babyId);
+      writeMockGlobalStore({
         ...store,
         memories: store.memories.filter((memory) => memory.id !== memoryId),
+        milestones: store.milestones.map((milestone) => ({
+          ...milestone,
+          media: milestone.media.filter((asset) => asset.memoryId !== memoryId),
+        })),
       });
       return;
     }
@@ -834,8 +852,7 @@ export const appRepository = {
     const { error } = await supabase
       .from("memories")
       .delete()
-      .eq("id", memoryId)
-      .eq("user_id", context.user.id);
+      .eq("id", memoryId);
     if (error) throw error;
 
     await removeStoragePaths((mediaRows ?? []).map((row) => row.storage_path));
@@ -848,7 +865,8 @@ export const appRepository = {
     }
 
     if (context.isMockMode) {
-      const store = readMockStore(context.user);
+      const store = getMockMutationStore(context.user);
+      ensureMockCanManageBaby(context.user, store, input.babyId);
       const existing = store.babyMembers.find(
         (member) =>
           member.babyId === input.babyId &&
@@ -873,7 +891,7 @@ export const appRepository = {
             member.id === existing.id ? nextMember : member,
           )
         : [...store.babyMembers, nextMember];
-      writeMockStore(context.user, { ...store, babyMembers });
+      writeMockGlobalStore({ ...store, babyMembers });
       return;
     }
 
@@ -920,10 +938,114 @@ export const appRepository = {
       throw error;
     }
   },
+  async updateBabyMemberRole(
+    context: RepositoryContext,
+    input: UpdateBabyMemberRoleInput,
+  ) {
+    if (context.isMockMode) {
+      const store = getMockMutationStore(context.user);
+      const target = store.babyMembers.find((member) => member.id === input.memberId);
+      if (!target) {
+        throw new Error("要修改的家庭成员不存在");
+      }
+
+      ensureMockCanManageBaby(context.user, store, target.babyId);
+      writeMockGlobalStore({
+        ...store,
+        babyMembers: store.babyMembers.map((member) =>
+          member.id === target.id
+            ? {
+                ...member,
+                role: input.role,
+                updatedAt: new Date().toISOString(),
+              }
+            : member,
+        ),
+      });
+      return;
+    }
+
+    const supabase = requireSupabase();
+    const { error } = await supabase
+      .from("baby_members")
+      .update({ role: input.role })
+      .eq("id", input.memberId);
+
+    if (error) {
+      throw error;
+    }
+  },
+  async acceptBabyInvite(context: RepositoryContext, memberId: string) {
+    if (context.isMockMode) {
+      const store = getMockMutationStore(context.user);
+      const target = store.babyMembers.find((member) => member.id === memberId);
+      if (!target || normalizeEmail(target.inviteEmail) !== normalizeEmail(context.user.email)) {
+        throw new Error("没有找到这条可接受的邀请");
+      }
+
+      writeMockGlobalStore({
+        ...store,
+        babyMembers: store.babyMembers.map((member) =>
+          member.id === target.id
+            ? {
+                ...member,
+                userId: context.user.id,
+                status: "active",
+                displayName: member.displayName || context.user.fullName || null,
+                updatedAt: new Date().toISOString(),
+              }
+            : member,
+        ),
+      });
+      return;
+    }
+
+    const supabase = requireSupabase();
+    const { error } = await supabase
+      .from("baby_members")
+      .update({
+        user_id: context.user.id,
+        status: "active",
+        display_name: context.user.fullName?.trim() || null,
+      })
+      .eq("id", memberId)
+      .eq("status", "invited");
+
+    if (error) {
+      throw error;
+    }
+  },
+  async declineBabyInvite(context: RepositoryContext, memberId: string) {
+    if (context.isMockMode) {
+      const store = getMockMutationStore(context.user);
+      const target = store.babyMembers.find((member) => member.id === memberId);
+      if (!target || normalizeEmail(target.inviteEmail) !== normalizeEmail(context.user.email)) {
+        throw new Error("没有找到这条可拒绝的邀请");
+      }
+
+      writeMockGlobalStore({
+        ...store,
+        babyMembers: store.babyMembers.filter((member) => member.id !== target.id),
+      });
+      return;
+    }
+
+    const supabase = requireSupabase();
+    const { error } = await supabase.from("baby_members").delete().eq("id", memberId);
+    if (error) {
+      throw error;
+    }
+  },
   async removeBabyMember(context: RepositoryContext, memberId: string) {
     if (context.isMockMode) {
-      const store = readMockStore(context.user);
-      writeMockStore(context.user, {
+      const store = getMockMutationStore(context.user);
+      const target = store.babyMembers.find((member) => member.id === memberId);
+      if (!target) {
+        throw new Error("要移除的家庭成员不存在");
+      }
+
+      ensureMockCanManageBaby(context.user, store, target.babyId);
+      writeMockGlobalStore({
         ...store,
         babyMembers: store.babyMembers.filter((member) => member.id !== memberId),
       });
@@ -938,7 +1060,8 @@ export const appRepository = {
   },
   async saveMilestone(context: RepositoryContext, input: SaveMilestoneInput) {
     if (context.isMockMode) {
-      const store = readMockStore(context.user);
+      const store = getMockMutationStore(context.user);
+      ensureMockCanEditContent(context.user, store, input.babyId);
       const existing = store.milestones.find((item) => item.id === input.id);
       const milestoneId = input.id ?? safeId();
       const media = [
@@ -972,13 +1095,12 @@ export const appRepository = {
             item.id === existing.id ? nextMilestone : item,
           )
         : [nextMilestone, ...store.milestones];
-      writeMockStore(context.user, { ...store, milestones });
+      writeMockGlobalStore({ ...store, milestones });
       return;
     }
 
     const supabase = requireSupabase();
     const payload = {
-      user_id: context.user.id,
       baby_id: input.babyId,
       title: input.title,
       happened_at: input.happenedAt,
@@ -993,14 +1115,13 @@ export const appRepository = {
       const { error } = await supabase
         .from("milestones")
         .update(payload)
-        .eq("id", input.id)
-        .eq("user_id", context.user.id);
+        .eq("id", input.id);
       if (error) throw error;
     } else {
       milestoneId = safeId();
       const { error } = await supabase
         .from("milestones")
-        .insert({ id: milestoneId, ...payload });
+        .insert({ id: milestoneId, user_id: context.user.id, ...payload });
       if (error) throw error;
     }
 
@@ -1008,8 +1129,14 @@ export const appRepository = {
   },
   async deleteMilestone(context: RepositoryContext, milestoneId: string) {
     if (context.isMockMode) {
-      const store = readMockStore(context.user);
-      writeMockStore(context.user, {
+      const store = getMockMutationStore(context.user);
+      const target = store.milestones.find((milestone) => milestone.id === milestoneId);
+      if (!target) {
+        throw new Error("要删除的里程碑不存在");
+      }
+
+      ensureMockCanEditContent(context.user, store, target.babyId);
+      writeMockGlobalStore({
         ...store,
         milestones: store.milestones.filter((item) => item.id !== milestoneId),
       });
@@ -1024,15 +1151,15 @@ export const appRepository = {
     const { error } = await supabase
       .from("milestones")
       .delete()
-      .eq("id", milestoneId)
-      .eq("user_id", context.user.id);
+      .eq("id", milestoneId);
     if (error) throw error;
 
     await removeStoragePaths((mediaRows ?? []).map((row) => row.storage_path));
   },
   async saveGrowthMetric(context: RepositoryContext, input: SaveGrowthMetricInput) {
     if (context.isMockMode) {
-      const store = readMockStore(context.user);
+      const store = getMockMutationStore(context.user);
+      ensureMockCanEditContent(context.user, store, input.babyId);
       const existing = store.growthMetrics.find((metric) => metric.id === input.id);
       const now = new Date().toISOString();
       const nextMetric: GrowthMetric = {
@@ -1052,13 +1179,12 @@ export const appRepository = {
             metric.id === existing.id ? nextMetric : metric,
           )
         : [...store.growthMetrics, nextMetric];
-      writeMockStore(context.user, { ...store, growthMetrics });
+      writeMockGlobalStore({ ...store, growthMetrics });
       return;
     }
 
     const supabase = requireSupabase();
     const payload = {
-      user_id: context.user.id,
       baby_id: input.babyId,
       type: input.type,
       value: input.value,
@@ -1071,16 +1197,23 @@ export const appRepository = {
           .from("growth_metrics")
           .update(payload)
           .eq("id", input.id)
-          .eq("user_id", context.user.id)
-      : supabase.from("growth_metrics").insert({ id: safeId(), ...payload });
+      : supabase
+          .from("growth_metrics")
+          .insert({ id: safeId(), user_id: context.user.id, ...payload });
 
     const { error } = await query;
     if (error) throw error;
   },
   async deleteGrowthMetric(context: RepositoryContext, metricId: string) {
     if (context.isMockMode) {
-      const store = readMockStore(context.user);
-      writeMockStore(context.user, {
+      const store = getMockMutationStore(context.user);
+      const target = store.growthMetrics.find((metric) => metric.id === metricId);
+      if (!target) {
+        throw new Error("要删除的成长数据不存在");
+      }
+
+      ensureMockCanEditContent(context.user, store, target.babyId);
+      writeMockGlobalStore({
         ...store,
         growthMetrics: store.growthMetrics.filter((metric) => metric.id !== metricId),
       });
@@ -1091,8 +1224,7 @@ export const appRepository = {
     const { error } = await supabase
       .from("growth_metrics")
       .delete()
-      .eq("id", metricId)
-      .eq("user_id", context.user.id);
+      .eq("id", metricId);
     if (error) throw error;
   },
   async suggestTags(_context: RepositoryContext, content: string): Promise<TagOption[]> {

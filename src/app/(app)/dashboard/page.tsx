@@ -3,6 +3,7 @@
 import type { ComponentType } from "react";
 import { useMemo, useState } from "react";
 import { Camera, Heart, Plus, Ruler, Sparkles, Target } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { BabyFormSheet } from "@/components/babies/baby-form-sheet";
 import { GrowthFormSheet } from "@/components/growth/growth-form-sheet";
@@ -24,11 +25,14 @@ export default function DashboardPage() {
     status,
     selectedBaby,
     babies,
+    incomingInvites,
+    permissions,
     recentMemories,
     recentMilestones,
     growthMetrics,
     galleryAssets,
   } = useAppData();
+  const router = useRouter();
   const [babySheetOpen, setBabySheetOpen] = useState(false);
   const [memorySheetOpen, setMemorySheetOpen] = useState(false);
   const [milestoneSheetOpen, setMilestoneSheetOpen] = useState(false);
@@ -54,10 +58,16 @@ export default function DashboardPage() {
     return (
       <>
         <EmptyState
-          actionLabel="创建第一个宝宝档案"
-          description="先创建宝宝资料，首页、记录、相册、里程碑和成长数据就会围绕这个档案展开。"
-          onAction={() => setBabySheetOpen(true)}
-          title="还没有宝宝档案"
+          actionLabel={incomingInvites.length > 0 ? "去处理共享邀请" : "创建第一个宝宝档案"}
+          description={
+            incomingInvites.length > 0
+              ? `你当前有 ${incomingInvites.length} 条待处理共享邀请，接受后就能直接进入宝宝档案；当然也可以自己新建一个。`
+              : "先创建宝宝资料，首页、记录、相册、里程碑和成长数据就会围绕这个档案展开。"
+          }
+          onAction={() =>
+            incomingInvites.length > 0 ? router.push("/family") : setBabySheetOpen(true)
+          }
+          title={incomingInvites.length > 0 ? "你有待处理的家庭共享邀请" : "还没有宝宝档案"}
         />
         <BabyFormSheet open={babySheetOpen} onClose={() => setBabySheetOpen(false)} />
       </>
@@ -69,10 +79,14 @@ export default function DashboardPage() {
       <div className="space-y-6">
         <SectionHeading
           action={
-            <Button onClick={() => setMemorySheetOpen(true)} type="button">
-              <Plus className="mr-2 h-4 w-4" />
-              新增记录
-            </Button>
+            permissions.canEditContent ? (
+              <Button onClick={() => setMemorySheetOpen(true)} type="button">
+                <Plus className="mr-2 h-4 w-4" />
+                新增记录
+              </Button>
+            ) : (
+              <Badge className="bg-[#fff3ea] text-[#a76446]">当前为只读查看模式</Badge>
+            )
           }
           eyebrow="Dashboard"
           description="把最近最重要的内容放在首页，方便你每天拿起手机就能快速记录。"
@@ -98,23 +112,44 @@ export default function DashboardPage() {
                     {selectedBaby.name}
                   </h1>
                   <Badge>{calculateAgeLabel(selectedBaby.birthDate)}</Badge>
+                  <Badge className="bg-[#eef6ff] text-[#4e74a8]">
+                    {permissions.role === "owner"
+                      ? "拥有者"
+                      : permissions.role === "editor"
+                        ? "编辑者"
+                        : "查看者"}
+                  </Badge>
                 </div>
                 <p className="mt-2 text-sm leading-7 text-slate-600">
                   出生于 {formatDate(selectedBaby.birthDate)}
                   {selectedBaby.notes ? ` · ${selectedBaby.notes}` : ""}
                 </p>
 
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <Button onClick={() => setMemorySheetOpen(true)} type="button">
-                    新增记录
-                  </Button>
-                  <Button onClick={() => setMilestoneSheetOpen(true)} type="button" variant="secondary">
-                    新增里程碑
-                  </Button>
-                  <Button onClick={() => setGrowthSheetOpen(true)} type="button" variant="secondary">
-                    新增成长数据
-                  </Button>
-                </div>
+                {permissions.canEditContent ? (
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <Button onClick={() => setMemorySheetOpen(true)} type="button">
+                      新增记录
+                    </Button>
+                    <Button
+                      onClick={() => setMilestoneSheetOpen(true)}
+                      type="button"
+                      variant="secondary"
+                    >
+                      新增里程碑
+                    </Button>
+                    <Button
+                      onClick={() => setGrowthSheetOpen(true)}
+                      type="button"
+                      variant="secondary"
+                    >
+                      新增成长数据
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="mt-5 rounded-[22px] bg-[#fff8f2] px-4 py-3 text-sm leading-6 text-slate-500">
+                    你当前以查看者身份加入这个档案，可以安心回顾成长过程；若需要一起记录，请让拥有者把你调整为编辑者。
+                  </p>
+                )}
               </div>
             </div>
 
@@ -165,9 +200,9 @@ export default function DashboardPage() {
                   ))
                 ) : (
                   <EmptyState
-                    actionLabel="写下第一条记录"
+                    actionLabel={permissions.canEditContent ? "写下第一条记录" : undefined}
                     description="先记下一顿饭、一次午睡，或者一个让你心头一暖的小瞬间。"
-                    onAction={() => setMemorySheetOpen(true)}
+                    onAction={permissions.canEditContent ? () => setMemorySheetOpen(true) : undefined}
                     title="今天还没有新记录"
                   />
                 )}
@@ -200,9 +235,11 @@ export default function DashboardPage() {
                   ))
                 ) : (
                   <EmptyState
-                    actionLabel="新增里程碑"
+                    actionLabel={permissions.canEditContent ? "新增里程碑" : undefined}
                     description="宝宝每个第一次都值得被珍藏，记录下来会很有仪式感。"
-                    onAction={() => setMilestoneSheetOpen(true)}
+                    onAction={
+                      permissions.canEditContent ? () => setMilestoneSheetOpen(true) : undefined
+                    }
                     title="里程碑还空着"
                   />
                 )}
@@ -221,9 +258,9 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <EmptyState
-                  actionLabel="上传第一张照片"
+                  actionLabel={permissions.canEditContent ? "上传第一张照片" : undefined}
                   description="在成长记录或里程碑中选择图片 / 视频，首页会自动聚合展示。"
-                  onAction={() => setMemorySheetOpen(true)}
+                  onAction={permissions.canEditContent ? () => setMemorySheetOpen(true) : undefined}
                   title="还没有媒体素材"
                 />
               )}
@@ -262,7 +299,7 @@ export default function DashboardPage() {
                   title="AI 成长周报"
                 />
                 <FuturePlaceholder
-                  description="已提供基础家庭共享页，后续继续补充接受邀请、通知和更细的角色权限。"
+                  description="已支持共享邀请、接受邀请和基础角色权限，后续继续补通知触达与更细粒度协作。"
                   title="家庭共享升级"
                 />
                 <FuturePlaceholder
@@ -279,17 +316,17 @@ export default function DashboardPage() {
       <MemoryFormSheet
         babyId={selectedBaby.id}
         onClose={() => setMemorySheetOpen(false)}
-        open={memorySheetOpen}
+        open={memorySheetOpen && permissions.canEditContent}
       />
       <MilestoneFormSheet
         babyId={selectedBaby.id}
         onClose={() => setMilestoneSheetOpen(false)}
-        open={milestoneSheetOpen}
+        open={milestoneSheetOpen && permissions.canEditContent}
       />
       <GrowthFormSheet
         babyId={selectedBaby.id}
         onClose={() => setGrowthSheetOpen(false)}
-        open={growthSheetOpen}
+        open={growthSheetOpen && permissions.canEditContent}
       />
       <MemoryDetailSheet
         memory={detailMemory}

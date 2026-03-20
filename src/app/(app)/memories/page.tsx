@@ -25,7 +25,14 @@ const defaultFilters: MemoryFilters = {
 const PAGE_SIZE = 6;
 
 export default function MemoriesPage() {
-  const { status, memories, availableTags, selectedBaby, deleteMemory } = useAppData();
+  const {
+    status,
+    memories,
+    availableTags,
+    selectedBaby,
+    permissions,
+    deleteMemory,
+  } = useAppData();
   const [filters, setFilters] = useState<MemoryFilters>(defaultFilters);
   const [currentPage, setCurrentPage] = useState(1);
   const [formOpen, setFormOpen] = useState(false);
@@ -98,19 +105,25 @@ export default function MemoriesPage() {
       <div className="space-y-6">
         <SectionHeading
           action={
-            <Button
-              onClick={() => {
-                setEditingMemory(null);
-                setFormOpen(true);
-              }}
-              type="button"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              新增记录
-            </Button>
+            permissions.canEditContent ? (
+              <Button
+                onClick={() => {
+                  setEditingMemory(null);
+                  setFormOpen(true);
+                }}
+                type="button"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                新增记录
+              </Button>
+            ) : null
           }
           eyebrow="Memories"
-          description="支持标题、正文、标签、收藏、置顶以及图片 / 视频上传，移动端优先呈现。"
+          description={
+            permissions.canEditContent
+              ? "支持标题、正文、标签、收藏、置顶以及图片 / 视频上传，移动端优先呈现。"
+              : "你当前是只读模式，可以浏览和搜索全部成长记录；若需要编辑，请让拥有者调整共享角色。"
+          }
           title={`${selectedBaby.name} 的成长记录`}
         />
 
@@ -194,8 +207,15 @@ export default function MemoriesPage() {
             {currentPageItems.map((memory) => (
               <MemoryCard
                 key={memory.id}
+                canManage={permissions.canEditContent}
                 memory={memory}
-                onDelete={() => void deleteMemory(memory.id)}
+                onDelete={() => {
+                  if (
+                    window.confirm("删除后这条记录下的图片和视频也会一起清理，确认继续吗？")
+                  ) {
+                    void deleteMemory(memory.id);
+                  }
+                }}
                 onEdit={() => {
                   setEditingMemory(memory);
                   setFormOpen(true);
@@ -229,9 +249,9 @@ export default function MemoriesPage() {
           </div>
         ) : (
           <EmptyState
-            actionLabel="新增一条记录"
+            actionLabel={permissions.canEditContent ? "新增一条记录" : undefined}
             description="试着放宽筛选条件，或者直接记录一个新瞬间。"
-            onAction={() => setFormOpen(true)}
+            onAction={permissions.canEditContent ? () => setFormOpen(true) : undefined}
             title="没有匹配的成长记录"
           />
         )}
@@ -244,9 +264,10 @@ export default function MemoriesPage() {
           setEditingMemory(null);
           setFormOpen(false);
         }}
-        open={formOpen}
+        open={formOpen && permissions.canEditContent}
       />
       <MemoryDetailSheet
+        canEdit={permissions.canEditContent}
         memory={detailMemory}
         onClose={() => setDetailMemory(null)}
         onEdit={() => {

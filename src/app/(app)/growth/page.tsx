@@ -16,7 +16,7 @@ import type { GrowthMetric } from "@/lib/types";
 import { formatDate, getMetricUnit } from "@/lib/utils";
 
 export default function GrowthPage() {
-  const { status, growthMetrics, selectedBaby, deleteGrowthMetric } = useAppData();
+  const { status, growthMetrics, selectedBaby, permissions, deleteGrowthMetric } = useAppData();
   const [formOpen, setFormOpen] = useState(false);
   const [editingMetric, setEditingMetric] = useState<GrowthMetric | null>(null);
 
@@ -43,19 +43,25 @@ export default function GrowthPage() {
       <div className="space-y-6">
         <SectionHeading
           action={
-            <Button
-              onClick={() => {
-                setEditingMetric(null);
-                setFormOpen(true);
-              }}
-              type="button"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              新增数据
-            </Button>
+            permissions.canEditContent ? (
+              <Button
+                onClick={() => {
+                  setEditingMetric(null);
+                  setFormOpen(true);
+                }}
+                type="button"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                新增数据
+              </Button>
+            ) : null
           }
           eyebrow="Growth"
-          description="用清晰的趋势图观察阶段变化，空状态下也会给出轻提示。"
+          description={
+            permissions.canEditContent
+              ? "用清晰的趋势图观察阶段变化，空状态下也会给出轻提示。"
+              : "当前共享角色为只读，仍可查看全部生长曲线和历史记录。"
+          }
           title={`${selectedBaby.name} 的成长数据`}
         />
 
@@ -92,25 +98,33 @@ export default function GrowthPage() {
                     <p className="text-lg font-black tracking-tight text-slate-900">
                       {metric.value} {getMetricUnit(metric.type)}
                     </p>
-                    <Button
-                      onClick={() => {
-                        setEditingMetric(metric);
-                        setFormOpen(true);
-                      }}
-                      type="button"
-                      variant="secondary"
-                    >
-                      <Pencil className="mr-2 h-4 w-4" />
-                      编辑
-                    </Button>
-                    <Button
-                      onClick={() => void deleteGrowthMetric(metric.id)}
-                      type="button"
-                      variant="danger"
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      删除
-                    </Button>
+                    {permissions.canEditContent ? (
+                      <Button
+                        onClick={() => {
+                          setEditingMetric(metric);
+                          setFormOpen(true);
+                        }}
+                        type="button"
+                        variant="secondary"
+                      >
+                        <Pencil className="mr-2 h-4 w-4" />
+                        编辑
+                      </Button>
+                    ) : null}
+                    {permissions.canEditContent ? (
+                      <Button
+                        onClick={() => {
+                          if (window.confirm("确认删除这条成长数据吗？")) {
+                            void deleteGrowthMetric(metric.id);
+                          }
+                        }}
+                        type="button"
+                        variant="danger"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        删除
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -118,9 +132,9 @@ export default function GrowthPage() {
           </Card>
         ) : (
           <EmptyState
-            actionLabel="新增第一条成长数据"
+            actionLabel={permissions.canEditContent ? "新增第一条成长数据" : undefined}
             description="先记一次儿保数据，图表和历史列表就会立刻出现。"
-            onAction={() => setFormOpen(true)}
+            onAction={permissions.canEditContent ? () => setFormOpen(true) : undefined}
             title="还没有成长数据"
           />
         )}
@@ -133,7 +147,7 @@ export default function GrowthPage() {
           setEditingMetric(null);
           setFormOpen(false);
         }}
-        open={formOpen}
+        open={formOpen && permissions.canEditContent}
       />
     </>
   );

@@ -5,7 +5,8 @@
 - 邮箱注册 / 登录
 - Google 登录入口
 - 多宝宝档案管理
-- 家庭共享基础版
+- 家庭共享邀请收件箱、接受 / 拒绝邀请
+- 拥有者 / 编辑者 / 查看者基础权限
 - 成长记录 CRUD
 - 图片 / 视频上传
 - 时间轴回顾
@@ -46,6 +47,7 @@ cp .env.example .env.local
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=your-project-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+NEXT_PUBLIC_BASE_PATH=
 ```
 
 如果不配置 Supabase，项目会自动进入本地演示模式：
@@ -81,8 +83,9 @@ npm run start
 1. 在 Supabase 创建新项目
 2. 打开 SQL Editor
 3. 执行 [supabase/schema.sql](./supabase/schema.sql)
-4. 确认 `baby-media` Storage bucket 已创建
-5. 将项目 URL 和 anon key 填入 `.env.local`
+4. 如果你是从旧版共享结构升级，请再执行 [supabase/migrations/20260320_family_invites_and_roles.sql](./supabase/migrations/20260320_family_invites_and_roles.sql)
+5. 确认 `baby-media` Storage bucket 已创建
+6. 将项目 URL 和 anon key 填入 `.env.local`
 
 ## 目录结构
 
@@ -119,6 +122,7 @@ src/
     validation.ts
 supabase/
   schema.sql
+  migrations/
 capacitor.config.ts
 ```
 
@@ -159,7 +163,8 @@ npm run mobile:sync
 - Google OAuth 登录入口
 - Dashboard 首页
 - 宝宝档案管理
-- 家庭共享基础成员管理
+- 家庭共享邀请流转
+- 共享角色权限控制
 - 成长记录 CRUD
 - 图片 / 视频媒体管理
 - 时间轴页
@@ -176,11 +181,29 @@ npm run mobile:sync
 - AI 自动打标签
 - AI 成长年册
 - 疫苗 / 体检 / 生日 / 纪念日提醒
-- 家庭共享接受邀请 / 邮件通知 / 更细粒度权限
+- 家庭共享邮件通知 / 更细粒度权限
+
+## GitHub Pages 发布
+
+仓库内已包含 [`.github/workflows/deploy-pages.yml`](./.github/workflows/deploy-pages.yml)。
+
+使用方式：
+
+1. 把本项目作为独立仓库推到 GitHub
+2. 进入仓库 `Settings -> Pages`
+3. Source 选择 `GitHub Actions`
+4. 推送到 `main` 分支后会自动构建并发布
+
+说明：
+
+- 工作流会自动把 `NEXT_PUBLIC_BASE_PATH` 设置为 `/${仓库名}`
+- 如果你部署到自定义域名或根域名，可以手动调整这个环境变量
+- 本地开发通常不需要设置 `NEXT_PUBLIC_BASE_PATH`
 
 ## 说明
 
 - 当前为了兼容静态导出与 Capacitor，认证和数据加载采用客户端模式
 - 未配置 Supabase 时，登录会走本地演示模式
 - 视频在演示模式下以占位封面为主，正式接入 Supabase Storage 后可使用真实播放链接
-- 如果你之前已经执行过旧版 `schema.sql`，升级后请重新补齐 `baby_members` 的 `invite_email`、`display_name` 和相关 policy
+- 共享编辑场景下，Storage 路径已经改成按 `babyId` 分层，拥有者和编辑者都能清理关联媒体
+- 如果你之前已经执行过旧版 `schema.sql`，请运行迁移文件补齐共享邀请、角色权限和新的 Storage policy

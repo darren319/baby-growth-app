@@ -1,3 +1,4 @@
+import { canUserAccessBaby, isIncomingBabyInvite, matchesMemberUser } from "@/lib/access";
 import type {
   AppStoreSnapshot,
   AuthUser,
@@ -12,11 +13,32 @@ import { createSvgPlaceholder } from "@/lib/utils";
 
 const MOCK_AUTH_KEY = "baby-growth-auth";
 const MOCK_STORE_PREFIX = "baby-growth-store";
+const MOCK_GLOBAL_STORE_KEY = "baby-growth-store-global";
 
 function nowOffset(daysOffset = 0) {
   const date = new Date();
   date.setDate(date.getDate() + daysOffset);
   return date.toISOString();
+}
+
+function withDefaults(snapshot?: Partial<AppStoreSnapshot> | null): AppStoreSnapshot {
+  return {
+    babies: snapshot?.babies ?? [],
+    memories: snapshot?.memories ?? [],
+    milestones: snapshot?.milestones ?? [],
+    growthMetrics: snapshot?.growthMetrics ?? [],
+    babyMembers: snapshot?.babyMembers ?? [],
+  };
+}
+
+function parseStore(raw: string | null) {
+  if (!raw) return null;
+
+  try {
+    return withDefaults(JSON.parse(raw) as Partial<AppStoreSnapshot>);
+  } catch {
+    return null;
+  }
 }
 
 function sampleMedia(userId: string, babyId: string): Record<string, MediaAsset> {
@@ -53,7 +75,11 @@ function sampleMedia(userId: string, babyId: string): Record<string, MediaAsset>
       babyId,
       kind: "video",
       fileUrl: undefined,
-      posterUrl: createSvgPlaceholder("第一次往前爬", "视频示意图，正式接入 Supabase 后可播放原视频", "#90B8F8"),
+      posterUrl: createSvgPlaceholder(
+        "第一次往前爬",
+        "视频示意图，正式接入 Supabase 后可播放原视频",
+        "#90B8F8",
+      ),
       fileName: "crawl-first.mp4",
       mimeType: "video/mp4",
       sizeBytes: 6_200_000,
@@ -286,11 +312,11 @@ function createSampleStore(user: AuthUser): AppStoreSnapshot {
     {
       id: "member-dad",
       babyId: primaryBabyId,
-      userId: "mock-dad-user",
+      userId: null,
       inviteEmail: "dad@example.com",
       displayName: "爸爸",
       role: "editor",
-      status: "active",
+      status: "invited",
       invitedBy: user.id,
       createdAt: nowOffset(-40),
       updatedAt: nowOffset(-18),
@@ -312,8 +338,18 @@ function createSampleStore(user: AuthUser): AppStoreSnapshot {
   return { babies, memories, milestones, growthMetrics, babyMembers };
 }
 
+function readLegacyMockUserStore(user: AuthUser) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return parseStore(window.localStorage.getItem(mockStoreKey(user.id)));
+}
+
 export function getMockMode() {
-  return !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  return (
+    !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
 }
 
 export function readMockAuthUser() {
@@ -344,35 +380,74 @@ export function mockStoreKey(userId: string) {
   return `${MOCK_STORE_PREFIX}:${userId}`;
 }
 
-export function readMockStore(user: AuthUser): AppStoreSnapshot {
+export function readMockGlobalStore(seedUser: AuthUser): AppStoreSnapshot {
   if (typeof window === "undefined") {
-    return createSampleStore(user);
+    return createSampleStore(seedUser);
   }
 
-  const raw = window.localStorage.getItem(mockStoreKey(user.id));
-  if (!raw) {
-    const seed = createSampleStore(user);
-    writeMockStore(user, seed);
-    return seed;
+  const existing = parseStore(window.localStorage.getItem(MOCK_GLOBAL_STORE_KEY));
+  if (existing) {
+    return existing;
   }
 
-  try {
-    const parsed = JSON.parse(raw) as Partial<AppStoreSnapshot>;
-    return {
-      babies: parsed.babies ?? [],
-      memories: parsed.memories ?? [],
-      milestones: parsed.milestones ?? [],
-      growthMetrics: parsed.growthMetrics ?? [],
-      babyMembers: parsed.babyMembers ?? [],
-    };
-  } catch {
-    const seed = createSampleStore(user);
-    writeMockStore(user, seed);
-    return seed;
-  }
+  const migrated = readLegacyMockUserStore(seedUser);
+  const seed = migrated ?? createSampleStore(seedUser);
+  writeMockGlobalStore(seed);
+  return seed;
 }
 
-export function writeMockStore(user: AuthUser, store: AppStoreSnapshot) {
+export function writeMockGlobalStore(store: AppStoreSnapshot) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(mockStoreKey(user.id), JSON.stringify(store));
+  window.localStorage.setItem(MOCK_GLOBAL_STORE_KEY, JSON.stringify(store));
+}
+
+export function filterMockStoreForUser(
+  store: AppStoreSnapshot,
+  user: AuthUser,
+): AppStoreSnapshot {
+  const accessibleBabyIds = new Set(
+    store.babies
+      .filter((baby) => canUserAccessBaby(user, baby, store.babyMembers))
+      .map((baby) => baby.id),
+  );
+
+  const visibleBabies = store.babies.filter(
+    (baby) =>
+      accessibleBabyIds.has(baby.id) ||
+      store.babyMembers.some(
+        (member) => member.babyId === baby.id && isIncomingBabyInvite(user, member),
+      ),
+  );
+
+  const visibleMembers = store.babyMembers.filter((member) => {
+    const isOwnerView = store.babies.some(
+      (baby) => baby.id === member.babyId && baby.userId === user.id,
+    );
+
+    return (
+      isOwnerView ||
+      (member.status === "active" && matchesMemberUser(user, member)) ||
+      isIncomingBabyInvite(user, member)
+    );
+  });
+
+  return {
+    babies: visibleBabies,
+    memories: store.memories.filter((memory) => accessibleBabyIds.has(memory.babyId)),
+    milestones: store.milestones.filter((milestone) =>
+      accessibleBabyIds.has(milestone.babyId),
+    ),
+    growthMetrics: store.growthMetrics.filter((metric) =>
+      accessibleBabyIds.has(metric.babyId),
+    ),
+    babyMembers: visibleMembers,
+  };
+}
+
+export function readMockStore(user: AuthUser): AppStoreSnapshot {
+  return filterMockStoreForUser(readMockGlobalStore(user), user);
+}
+
+export function writeMockStore(_user: AuthUser, store: AppStoreSnapshot) {
+  writeMockGlobalStore(store);
 }

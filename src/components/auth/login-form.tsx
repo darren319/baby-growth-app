@@ -85,7 +85,7 @@ export function LoginForm() {
               <p className="mt-2 text-sm leading-6 text-slate-500">
                 {mode === "sign-in"
                   ? "登录后即可进入宝宝成长主页。"
-                  : "先开通你的家长账号，后面可以继续扩展 Google 登录。"}
+                  : "先开通你的家长账号，后面也可以继续用 Google 登录补充共享成员。"}
               </p>
             </div>
             <span className="rounded-full bg-[#fff3ea] px-3 py-1 text-xs font-semibold text-[#aa6d4b]">

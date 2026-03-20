@@ -11,11 +11,13 @@ export function MemoryCard({
   onView,
   onEdit,
   onDelete,
+  canManage = true,
 }: {
   memory: MemoryRecord;
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  canManage?: boolean;
 }) {
   const preview = firstMediaPreview(memory.media);
 
@@ -57,18 +59,22 @@ export function MemoryCard({
           {memory.mood ? <Badge className="bg-[#eef6ff] text-[#4e74a8]">{memory.mood}</Badge> : null}
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className={`grid gap-2 ${canManage ? "grid-cols-3" : "grid-cols-1"}`}>
           <Button onClick={onView} type="button" variant="secondary">
             查看详情
           </Button>
-          <Button onClick={onEdit} type="button">
-            <Pencil className="mr-2 h-4 w-4" />
-            编辑
-          </Button>
-          <Button onClick={onDelete} type="button" variant="danger">
-            <Trash2 className="mr-2 h-4 w-4" />
-            删除
-          </Button>
+          {canManage ? (
+            <Button onClick={onEdit} type="button">
+              <Pencil className="mr-2 h-4 w-4" />
+              编辑
+            </Button>
+          ) : null}
+          {canManage ? (
+            <Button onClick={onDelete} type="button" variant="danger">
+              <Trash2 className="mr-2 h-4 w-4" />
+              删除
+            </Button>
+          ) : null}
         </div>
       </div>
     </Card>
