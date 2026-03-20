@@ -183,22 +183,20 @@ npm run mobile:sync
 - 疫苗 / 体检 / 生日 / 纪念日提醒
 - 家庭共享邮件通知 / 更细粒度权限
 
-## GitHub Pages 发布
+## 静态发布
 
-仓库内已包含 [`.github/workflows/deploy-pages.yml`](./.github/workflows/deploy-pages.yml)。
+项目支持静态导出，适合部署到 GitHub Pages、Netlify、Vercel 静态模式或任意 CDN。
 
-使用方式：
+如果你部署到 GitHub Pages 的 project page：
 
-1. 把本项目作为独立仓库推到 GitHub
-2. 进入仓库 `Settings -> Pages`
-3. Source 选择 `GitHub Actions`
-4. 推送到 `main` 分支后会自动构建并发布
+- 构建前把 `NEXT_PUBLIC_BASE_PATH` 设置为 `/${仓库名}`
+- 再执行 `npm run build`
+- 把 `out/` 内容发布到目标分支或静态托管目录
 
-说明：
+如果你部署到根域名或 `username.github.io` 这类 root site：
 
-- 工作流会自动把 `NEXT_PUBLIC_BASE_PATH` 设置为 `/${仓库名}`
-- 如果你部署到自定义域名或根域名，可以手动调整这个环境变量
-- 本地开发通常不需要设置 `NEXT_PUBLIC_BASE_PATH`
+- 保持 `NEXT_PUBLIC_BASE_PATH` 为空
+- 直接执行 `npm run build`
 
 ## 说明
 
